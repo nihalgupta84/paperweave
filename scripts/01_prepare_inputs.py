@@ -189,6 +189,7 @@ def main():
     logs_dir.mkdir(parents=True, exist_ok=True)
     manifests_dir.mkdir(parents=True, exist_ok=True)
 
+    in_place_mode = input_path == raw_dir or (input_path.is_file() and input_path.parent == raw_dir)
     pdfs, skipped = collect_files(input_path)
 
     skipped_log = logs_dir / "skipped_non_pdf_files.txt"
@@ -216,7 +217,11 @@ def main():
         slug = slugify(title)
         target = raw_dir / f"{slug}.pdf"
 
-        if target.exists():
+        if in_place_mode:
+            target = pdf
+            print(f"[{idx}/{len(pdfs)}] IN_PLACE: {target.name}")
+            action = "in_place"
+        elif target.exists():
             if sha256_file(target) == digest:
                 print(f"[{idx}/{len(pdfs)}] EXISTS: {target.name}")
                 action = "exists_same_hash"
