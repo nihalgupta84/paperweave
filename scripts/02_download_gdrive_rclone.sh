@@ -3,15 +3,12 @@ set -euo pipefail
 
 DRIVE_INPUT="${1:-}"
 OUT_DIR="${2:-}"
-REMOTE="${3:-amity}"
+REMOTE="${3:-}"
 REMOTE="${REMOTE%:}"
 
 if [[ -z "$DRIVE_INPUT" || -z "$OUT_DIR" ]]; then
   echo "Usage:"
   echo "  bash scripts/02_download_gdrive_rclone.sh <google_drive_folder_link_or_id> <download_output_dir> [rclone_remote]"
-  echo
-  echo "Example:"
-  echo "  bash scripts/02_download_gdrive_rclone.sh 'https://drive.google.com/drive/folders/XXXX' /tmp/downloaded amity"
   exit 1
 fi
 
@@ -23,6 +20,15 @@ fi
 if ! command -v jq >/dev/null 2>&1; then
   echo "ERROR: jq not found. Install jq so supported Google Drive documents can be selected by MIME type."
   exit 2
+fi
+
+if [[ -z "$REMOTE" ]]; then
+  mapfile -t CONFIGURED_REMOTES < <(rclone listremotes | sed 's/:$//')
+  if [[ "${#CONFIGURED_REMOTES[@]}" -ne 1 ]]; then
+    echo "ERROR: configure exactly one rclone remote or pass its name as the third argument."
+    exit 2
+  fi
+  REMOTE="${CONFIGURED_REMOTES[0]}"
 fi
 
 extract_id() {

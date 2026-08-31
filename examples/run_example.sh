@@ -13,7 +13,6 @@ fi
 bash scripts/05_run_all.sh \
   --input "https://drive.google.com/drive/folders/YOUR_FOLDER_ID?usp=sharing" \
   --corpus-dir /path/to/project/corpus \
-  --remote amity \
   --device gpu \
   --rename-mode title \
   --format-policy prefer-pdf \

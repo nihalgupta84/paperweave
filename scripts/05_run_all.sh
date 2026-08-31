@@ -3,7 +3,7 @@ set -euo pipefail
 
 INPUT=""
 CORPUS_DIR=""
-REMOTE="amity"
+REMOTE=""
 DEVICE="auto"
 RENAME_MODE="title"
 FORMAT_POLICY="prefer-pdf"
@@ -22,7 +22,7 @@ Usage:
   bash scripts/05_run_all.sh --input <file_or_mixed_folder> --corpus-dir <target_corpus_dir>
 
 Options:
-  --remote NAME                         rclone remote for Google Drive input
+  --remote NAME                         rclone remote; auto-selects the only configured remote when omitted
   --device auto|gpu|cpu                 MinerU device selection
   --rename-mode title|keep               canonical source naming policy
   --format-policy prefer-pdf|all         equivalent-format selection policy
@@ -147,6 +147,14 @@ LOCAL_INPUT="$INPUT"
 if [[ "$INPUT" == *"drive.google.com"* || "$INPUT" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
   echo
   echo "[1/5] Google Drive input detected. Downloading supported documents with rclone..."
+  if [[ -z "$REMOTE" ]]; then
+    mapfile -t CONFIGURED_REMOTES < <(rclone listremotes | sed 's/:$//')
+    if [[ "${#CONFIGURED_REMOTES[@]}" -ne 1 ]]; then
+      echo "ERROR: configure exactly one rclone remote or pass --remote <name>."
+      exit 2
+    fi
+    REMOTE="${CONFIGURED_REMOTES[0]}"
+  fi
   bash "$SCRIPT_DIR/02_download_gdrive_rclone.sh" "$INPUT" "$CORPUS_DIR/downloaded" "$REMOTE"
   LOCAL_INPUT="$CORPUS_DIR/downloaded"
 else
