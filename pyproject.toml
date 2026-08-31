@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperweave"
-version = "0.2.0"
+version = "0.1.0"
 description = "Evidence-backed research paper corpus normalization and synthesis"
 readme = "README.md"
 license = {file = "LICENSE"}

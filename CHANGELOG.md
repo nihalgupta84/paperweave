@@ -1,19 +1,14 @@
 # Changelog
 
-All notable changes to PaperWeave are documented here.
+## [0.1.0] - 2026-08-31
 
-## [0.2.0] - 2026-08-31
+First public release of PaperWeave.
 
-- Added PDF, DOCX, HTML, and HTM ingestion for single files and mixed folders.
-- Added SHA-256 deduplication, recoverable duplicate quarantine, title-based
-  canonical names, work grouping, and format preference.
-- Added normalized blocks, section roles, quality diagnostics, evidence
-  validation, taxonomy collections, and five corpus synthesis reports.
-- Added deterministic CPU analysis with optional Ollama and
-  OpenAI-compatible structured-output enrichment and recorded fallback.
-- Added stage-specific rerun controls, gold-corpus evaluation, CI, licensing,
-  contribution guidance, and security guidance.
-
-## [0.1.0]
-
-- Initial PDF/MinerU corpus conversion workflow.
+- Ingest PDF, DOCX, HTML, and HTM files from one path or a recursive mixed folder.
+- Deduplicate exact bytes before extraction and quarantine duplicates recoverably.
+- Group equivalent titles into work records while retaining document versions.
+- Prefer PDF, then DOCX, then HTML by default, with an `all` policy available.
+- Normalize MinerU output and native DOCX/HTML into flat, provenance-linked documents.
+- Generate methodology, experiments, datasets, literature-review, and combined reports.
+- Provide deterministic CPU analysis plus optional Ollama/OpenAI-compatible enrichment.
+- Add quality diagnostics, failure isolation, taxonomy collections, CI, and PyPI packaging.

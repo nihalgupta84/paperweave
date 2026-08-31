@@ -1,44 +1,46 @@
-# PaperWeave
+# 📚 PaperWeave
 
-> Turn a messy folder of research files into an evidence-backed research workspace.
+> **From a messy paper folder to a review-ready research workspace.**
 
 [![CI](https://github.com/nihalgupta84/paperweave/actions/workflows/ci.yml/badge.svg)](https://github.com/nihalgupta84/paperweave/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/paperweave?color=3776AB&label=PyPI)](https://pypi.org/project/paperweave/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-PaperWeave is for the moment after you download papers and before you write a
-literature review. It cleans and deduplicates the input, keeps PDF/DOCX/HTML
-versions organized, extracts content, attaches evidence to structured facts,
-and writes review-ready Markdown reports.
+PaperWeave is a small, evidence-first pipeline for researchers who already
+have papers and want to understand them systematically. Give it one file or a
+folder; it deduplicates, organizes, extracts, and creates grounded Markdown
+reports for literature review.
 
-It works with a project-local `corpus/` directory. There is no global corpus to
-configure and no required cloud LLM.
+> [!TIP]
+> **If you remember only one command:**
+> `bash scripts/05_run_all.sh --input /path/to/papers --corpus-dir /path/to/project/corpus`
 
-## Why use PaperWeave?
+## ✨ Why PaperWeave?
 
-Research folders become difficult to trust for three common reasons:
+Paper folders usually fail in three places:
 
-- the same paper appears as a PDF, DOCX, HTML page, and renamed copy;
-- one paper belongs to several useful topics, but a folder can express only one
-  path;
-- a language model can summarize a claim without showing exactly where it came
-  from.
+1. the same work appears as a PDF, DOCX, HTML page, and renamed copy;
+2. one paper belongs to several topics, but a single folder path cannot express
+   that;
+3. a generated summary says *what* a paper claims but not *where* the claim
+   came from.
 
-PaperWeave addresses all three in one repeatable workflow:
+PaperWeave solves these together:
 
-| Typical approach | What it leaves you to solve | PaperWeave’s answer |
-| --- | --- | --- |
-| PDF-to-Markdown conversion | duplicates, versions, and corpus organization | hash-based deduplication and work/document records |
-| Topic folders | papers that belong to multiple topics | multi-facet collections without copying files |
-| Embeddings-only RAG | exact evidence and reproducibility | block-level evidence, page data, and deterministic records |
-| LLM-only summarization | unavailable models and unsupported claims | CPU-first extraction with optional, replaceable LLM enrichment |
+| Instead of… | You get… |
+| --- | --- |
+| processing every copy | SHA-256 deduplication before extraction |
+| making one deep folder tree | multi-facet collections: method, condition, dataset, goal |
+| trusting a free-form summary | structured facts linked to blocks, pages, and sections |
+| depending on one model server | deterministic CPU output with optional LLM enrichment |
 
-PaperWeave is complementary to MinerU and retrieval systems: MinerU parses
-complex PDF layout; PaperWeave turns parser output and native document formats
-into a usable research corpus.
+It is not another foundation model, PDF viewer, or embeddings-only chatbot.
+It is the reliable layer between downloaded documents and literature analysis.
 
-## 60-second start
+## 🚀 Start in three steps
 
-From a checkout, install everything needed for the complete PDF workflow:
+### 1. Install
 
 ```bash
 git clone https://github.com/nihalgupta84/paperweave.git
@@ -49,7 +51,10 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[full]"
 ```
 
-Point the pipeline at one file or any mixed folder:
+`.[full]` installs the complete PDF workflow, including MinerU. For DOCX/HTML
+and deterministic analysis only, use `python -m pip install -e .` instead.
+
+### 2. Run
 
 ```bash
 bash scripts/05_run_all.sh \
@@ -58,105 +63,77 @@ bash scripts/05_run_all.sh \
   --device auto
 ```
 
-The default is intentionally simple: exact duplicates are removed before
-extraction, PDF is preferred when the same work also has DOCX/HTML, and
-deterministic analysis runs even when no local LLM is available.
+`--input` can be a single PDF/DOCX/HTML file or a recursive mixed folder.
 
-For DOCX/HTML-only work, avoid the heavy PDF stack:
+### 3. Read the results
 
-```bash
-python -m pip install -e .
-paperweave ingest --input /path/to/documents --corpus /path/to/my_project/corpus
-paperweave normalize-non-pdf --corpus /path/to/my_project/corpus
-paperweave postprocess --corpus /path/to/my_project/corpus
+Open these files:
+
+```text
+/path/to/my_project/corpus/synthesis/
+├── methodology.md
+├── experiments.md
+├── datasets.md
+├── literature_review.md
+└── all_papers.md
 ```
 
-After a PyPI release, the equivalent installation will be:
+## 🗂️ Fits your existing project layout
 
-```bash
-python -m pip install "paperweave[full]"
-```
-
-## Your existing `corpus/` workflow
-
-You can keep downloading into a project’s own corpus directory. A typical
-layout is:
+You do not need a global corpus. Keep each project self-contained:
 
 ```text
 my_project/
 └── corpus/
-    ├── incoming/       # optional staging area for rclone or manual downloads
-    ├── pdfs/           # created and managed by PaperWeave
-    ├── papers/         # clean per-document Markdown and blocks
-    ├── records/        # evidence-backed structured records
-    └── synthesis/      # the reports you read
+    ├── incoming/       ← your rclone/manual download area
+    ├── pdfs/           ← selected canonical PDFs
+    ├── sources/        ← selected DOCX/HTML sources
+    ├── papers/         ← clean Markdown, blocks, and assets
+    ├── records/        ← work/document facts with evidence
+    ├── collections/    ← generated multi-facet indexes
+    └── synthesis/      ← five review-ready reports
 ```
 
-Run the same command after adding more files:
+Run it again after adding papers. Existing exact duplicates are not processed
+again, and successful documents remain usable if another document fails.
 
-```bash
-bash scripts/05_run_all.sh \
-  --input /path/to/my_project/corpus/incoming \
-  --corpus-dir /path/to/my_project/corpus \
-  --device auto
-```
+## 🧩 What happens to your files?
 
-For Google Drive, the input may be a folder URL or folder ID. PaperWeave does
-not assume a particular rclone remote: if exactly one remote is configured it
-is selected automatically. If you have several remotes, pass yours explicitly:
+| Input | PaperWeave behavior |
+| --- | --- |
+| One PDF, DOCX, HTML, or HTM | Process that document |
+| Folder with mixed files | Recursively process supported files; log the rest |
+| Exact duplicate bytes | Process once; quarantine the extra copy recoverably |
+| PDF + DOCX + HTML of one work | Keep all records; prefer PDF by default (`PDF > DOCX > HTML`) |
+| Different PDF versions | Keep them as separate documents under one work |
+| CSV, PNG, JPEG, ZIP, or other unsupported file | Skip and record the reason |
+| Password-protected PDF | Move to `quarantine/unreadable/` and continue |
+| No GPU | Use CPU where supported; PDF parsing may be slower |
+| No local LLM | Use deterministic extraction and record the fallback |
+
+Use `--format-policy all` when you want every distinct representation
+normalized. Fuzzy title matches are flagged for review, never silently merged.
+
+## ☁️ Google Drive (optional)
+
+Local folders need no cloud setup. For Drive, pass a folder URL or ID:
 
 ```bash
 bash scripts/05_run_all.sh \
   --input "https://drive.google.com/drive/folders/<folder-id>" \
   --corpus-dir /path/to/my_project/corpus \
-  --remote <your-rclone-remote> \
   --device auto
 ```
 
-The Google Drive helper requires [rclone](https://github.com/rclone/rclone)
-and `jq`; local folders require neither.
+If exactly one rclone remote is configured, PaperWeave selects it automatically.
+If you have several, add `--remote <your-rclone-remote>`. The helper uses
+[rclone](https://github.com/rclone/rclone) and `jq`; the remote name is never
+hard-coded.
 
-## What happens to each input?
+## 🧠 Optional local intelligence
 
-| Input | Behavior |
-| --- | --- |
-| One PDF, DOCX, HTML, or HTM | Process that document |
-| Recursive mixed folder | Process every supported document and log unrelated files |
-| Exact byte duplicate | Process once; quarantine an in-corpus duplicate recoverably |
-| Same work as PDF + DOCX + HTML | Keep all records; process the preferred format by default (`PDF > DOCX > HTML`) |
-| Different PDF versions | Keep them as distinct documents under a work record |
-| CSV, PNG, JPEG, ZIP, or other unsupported file | Skip it and record the reason |
-| Password-protected PDF | Move it to `quarantine/unreadable/` and continue |
-| No GPU | Use CPU where supported; PDF parsing may be slower |
-| No local LLM | Use deterministic extraction; provider failure is recorded, not hidden |
-
-Use `--format-policy all` when you deliberately want every distinct
-representation normalized. Fuzzy title matches are flagged for review and are
-never silently merged.
-
-## What you get
-
-The most useful outputs are in `corpus/synthesis/`:
-
-```text
-methodology.md       # methods, components, and limitations
-experiments.md       # datasets, metrics, baselines, and reported results
-datasets.md          # dataset-centric view
-literature_review.md # evidence-backed thematic index
-all_papers.md        # combined normalized corpus Markdown
-```
-
-The supporting record for each work is stored under `corpus/records/`. Every
-accepted fact points back to a normalized block, page, and section when the
-source provides that information. `corpus/collections/` contains generated
-facets such as method family, condition, dataset, and research goal; papers
-are referenced, not copied into multiple folders.
-
-## No-GPU and no-LLM operation
-
-PaperWeave is useful without a model server. The default semantic stage is
-deterministic and extractive. Ollama and OpenAI-compatible endpoints are
-optional:
+No model server is required. The default analyzer is deterministic and
+extractive. If you have Ollama or an OpenAI-compatible endpoint, add enrichment:
 
 ```bash
 paperweave postprocess \
@@ -165,105 +142,97 @@ paperweave postprocess \
   --model <model-name>
 ```
 
-If the endpoint is missing, the run falls back to deterministic analysis and
-records the reason in `corpus/manifests/last_run.json`. Use
-`--strict-provider` only when a missing model should fail the run.
+If the provider is unavailable, the pipeline falls back to deterministic output
+and records the reason in `corpus/manifests/last_run.json`. Use
+`--strict-provider` only when fallback should be an error.
 
-## Useful commands
+## 🔍 Why it is different
+
+- **Identity before extraction** — hashes, canonical names, work grouping, and
+  format preference prevent duplicate processing.
+- **Evidence before prose** — every accepted fact can point back to its source
+  block, page, and section.
+- **Facets instead of folders** — a paper can be “low-light”, “Mamba”,
+  “efficient”, and “KITTI” simultaneously.
+- **Graceful degradation** — CPU and no-LLM workflows remain useful.
+- **Rebuildable views** — reports and collections are generated from records,
+  not hand-edited folder copies.
+
+That is why someone should use PaperWeave: it turns an existing collection of
+papers into an inspectable starting point for comparison, literature review,
+gap analysis, and agent-assisted reading with minimal code.
+
+## 🛠️ Useful commands
 
 ```bash
 paperweave capabilities
-bash scripts/99_status.sh /path/to/my_project/corpus
+paperweave --help
 bash scripts/05_run_all.sh --help
+bash scripts/99_status.sh /path/to/my_project/corpus
 ```
 
-To repair only a failed or changed stage, use `--retry-failed`,
-`--force-mineru`, `--force-normalization`, or `--force-analysis`. Use
-`--taxonomy-profile core` for a general corpus or
-`--taxonomy-profile computer_vision/optical_flow` for the included example
-profile.
+Stage controls are available when only part of a corpus needs work:
+`--retry-failed`, `--force-mineru`, `--force-normalization`, and
+`--force-analysis`.
 
-## What makes this project different
+## 📦 Installation choices
 
-PaperWeave is not a new foundation model or a replacement for MinerU. Its value
-is the research workflow around extraction:
-
-1. **Identity before extraction:** hashes, canonical names, work grouping, and
-   format preference prevent duplicate processing.
-2. **Evidence before prose:** structured facts retain source locations, so an
-   agent can inspect evidence instead of treating a generated summary as truth.
-3. **Facets instead of folders:** one paper can be low-light, Mamba-based,
-   efficient, and evaluated on KITTI at the same time.
-4. **Graceful degradation:** the useful deterministic path remains available
-   on a CPU or when an LLM server is unavailable.
-5. **Generated views:** reports, collections, and future retrieval indexes can
-   be rebuilt from canonical records.
-
-This makes PaperWeave useful to researchers who already have a paper folder and
-want a clean, inspectable starting point for literature review, comparison,
-gap analysis, and agent-assisted reading.
-
-## Installation options
-
-The package uses standard `pip` extras defined in `pyproject.toml`:
-
-| Command | Use |
+| Install | Best for |
 | --- | --- |
-| `python -m pip install -e .` | DOCX/HTML and deterministic CPU workflow |
+| `python -m pip install -e .` | DOCX/HTML and deterministic CPU analysis |
 | `python -m pip install -e ".[pdf]"` | PDF metadata helpers |
-| `python -m pip install -e ".[full]"` | Complete workflow, including MinerU |
-| `python -m pip install -e ".[dev]"` | Build and development checks |
+| `python -m pip install -e ".[full]"` | Complete PDF + MinerU workflow |
+| `python -m pip install -e ".[dev]"` | Tests, builds, and release checks |
 
-GPU acceleration is optional. `rclone` and `jq` are external command-line
-tools used only for Google Drive ingestion. No API key is needed for the
-default workflow.
+After the first PyPI release:
 
-## Project status and limitations
+```bash
+python -m pip install "paperweave[full]"
+```
 
-The current release is an early, deterministic corpus workflow. It does not
-claim that extracted facts are scientifically true; it makes their source
-evidence inspectable. Review low-quality documents reported in `quality.json`.
-Automatic fuzzy work merging, citation-graph enrichment, vector retrieval,
-and figure-to-pipeline reconstruction are intentionally separate extensions.
+GPU acceleration is optional. No API key is needed for the default workflow.
 
-Downloaded papers and generated corpora may have redistribution restrictions.
-Keep them out of Git unless their licenses permit redistribution. The
-repository’s `.gitignore` is configured for this local-workspace model.
+## ⚖️ Scope and limitations
 
-## Acknowledgements
+PaperWeave does not claim that an extracted fact is scientifically true; it
+makes the source evidence inspectable. Review documents marked `review_needed`
+in `quality.json`. Automatic fuzzy work merging, citation-graph enrichment,
+vector retrieval, and figure-to-pipeline reconstruction are future extensions.
 
-PaperWeave is built around and interoperates with these open-source projects:
+Do not commit downloaded papers or generated corpora unless their licenses allow
+redistribution. The repository’s `.gitignore` is designed for project-local
+private corpora.
 
-- [MinerU](https://github.com/opendatalab/MinerU) — PDF/document parsing and
-  layout-aware Markdown/JSON extraction.
-- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF inspection and metadata
-  support.
-- [pypdf](https://github.com/py-pdf/pypdf) — lightweight PDF metadata and
-  preflight support.
-- [rclone](https://github.com/rclone/rclone) — optional Google Drive transfer.
-- [Ollama](https://github.com/ollama/ollama) — optional local semantic provider.
-- [vLLM](https://github.com/vllm-project/vllm) — compatible optional inference
-  server for structured-output providers.
-- [GROBID](https://github.com/kermitt2/grobid) — related scholarly metadata
-  integration planned for a future optional adapter; it is not required by
-  the current pipeline.
+## 🙏 Acknowledgements
 
-Please review each upstream project’s own license and citation guidance. See
-[`CITATION.cff`](CITATION.cff) for citing PaperWeave itself.
+PaperWeave uses or interoperates with:
 
-## Development and release
+- [MinerU](https://github.com/opendatalab/MinerU) for layout-aware document
+  parsing and Markdown/JSON extraction.
+- [rclone](https://github.com/rclone/rclone) for optional Google Drive transfer.
+- [Ollama](https://github.com/ollama/ollama) for optional local model serving.
+- [vLLM](https://github.com/vllm-project/vllm) for compatible optional inference
+  endpoints.
+- [GROBID](https://github.com/kermitt2/grobid) as a planned optional scholarly
+  metadata adapter; it is not required by the current pipeline.
+
+Please follow each upstream project’s own license and citation guidance. See
+[`CITATION.cff`](CITATION.cff) for citing PaperWeave.
+
+## 👩‍💻 Development and release
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 python -m build
+python -m twine check dist/*
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), and
-[`docs/releasing.md`](docs/releasing.md). Releases use PyPI Trusted Publishing
-from GitHub Actions; no PyPI token belongs in this repo.
+[`docs/releasing.md`](docs/releasing.md). PyPI uploads use GitHub Actions
+Trusted Publishing; no API token belongs in the repository.
 
-## License
+## 📄 License
 
-PaperWeave is released under the [MIT License](LICENSE). This license applies
-to PaperWeave code, not to papers processed by users or to upstream projects.
+PaperWeave is released under the [MIT License](LICENSE). This applies to
+PaperWeave code, not to processed papers or upstream projects.
