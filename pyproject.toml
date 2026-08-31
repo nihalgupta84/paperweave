@@ -43,6 +43,7 @@ full = [
 dev = [
   "build>=1.2",
   "jsonschema>=4.23",
+  "twine>=5.1",
 ]
 
 [project.scripts]
