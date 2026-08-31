@@ -127,8 +127,7 @@ bash scripts/05_run_all.sh \
 
 If exactly one rclone remote is configured, PaperWeave selects it automatically.
 If you have several, add `--remote <your-rclone-remote>`. The helper uses
-[rclone](https://github.com/rclone/rclone) and `jq`; the remote name is never
-hard-coded.
+[rclone](https://github.com/rclone/rclone) and `jq`; 
 
 ## 🧠 Optional local intelligence
 
