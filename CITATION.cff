@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: "PaperWeave"
+message: "If PaperWeave is useful in your research, please cite this repository."
+type: software
+authors:
+  - name: "PaperWeave contributors"
+version: 0.2.0
+date-released: 2026-08-31
+license: MIT
+repository-code: "https://github.com/nihalgupta84/paperweave"
+url: "https://github.com/nihalgupta84/paperweave"
+abstract: "Evidence-backed normalization, organization, and synthesis for research-paper corpora."

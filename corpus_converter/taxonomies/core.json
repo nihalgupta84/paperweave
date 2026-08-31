@@ -1,0 +1,41 @@
+{
+  "method_family": {
+    "method.cnn": ["cnn", "convolutional neural network"],
+    "method.recurrent": ["recurrent", "lstm", "gru"],
+    "method.transformer": ["transformer", "self-attention", "self attention"],
+    "method.state_space_model": ["state space model", "state-space model", "ssm"],
+    "method.mamba": ["mamba", "selective state space"],
+    "method.diffusion": ["diffusion model", "denoising diffusion"],
+    "method.graph_neural_network": ["graph neural network", "gnn"],
+    "method.gan": ["generative adversarial network", "gan"]
+  },
+  "learning_paradigm": {
+    "learning.supervised": ["supervised learning", "fully supervised"],
+    "learning.unsupervised": ["unsupervised", "without ground truth"],
+    "learning.self_supervised": ["self-supervised", "self supervised"],
+    "learning.semi_supervised": ["semi-supervised", "semi supervised"],
+    "learning.domain_adaptation": ["domain adaptation"],
+    "learning.zero_shot": ["zero-shot", "zero shot"]
+  },
+  "research_goal": {
+    "goal.accuracy": ["accuracy", "accurate"],
+    "goal.robustness": ["robustness", "robust"],
+    "goal.efficiency": ["efficiency", "efficient", "lightweight"],
+    "goal.real_time": ["real-time", "real time"],
+    "goal.generalization": ["generalization", "generalisation"],
+    "goal.low_memory": ["memory efficient", "low memory"]
+  },
+  "paper_role": {
+    "role.dataset": ["new dataset", "introduce a dataset", "dataset and benchmark"],
+    "role.survey": ["survey", "systematic review", "narrative review"],
+    "role.benchmark": ["benchmark study", "benchmark dataset"],
+    "role.method": ["we propose", "proposed method", "proposed framework", "novel model"]
+  },
+  "modality": {
+    "modality.rgb": ["rgb image", "rgb images"],
+    "modality.text": ["text data", "textual data", "natural language"],
+    "modality.event_camera": ["event camera", "event-based camera"],
+    "modality.thermal": ["thermal image", "infrared image"],
+    "modality.multimodal": ["multimodal", "multi-modal"]
+  }
+}

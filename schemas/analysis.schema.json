@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "work_id", "document_id", "extraction_mode", "research_problem", "methodology", "contributions", "method_components", "training_objectives", "limitations", "claims"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "work_id": {"type": "string"},
+    "document_id": {"type": "string"},
+    "document_ids": {"type": "array", "items": {"type": "string"}},
+    "extraction_mode": {"type": "string"},
+    "research_problem": {"type": "array"},
+    "methodology": {"type": "array"},
+    "contributions": {"type": "array"},
+    "method_components": {"type": "array"},
+    "training_objectives": {"type": "array"},
+    "limitations": {"type": "array"},
+    "claims": {"type": "array"}
+  },
+  "additionalProperties": false
+}

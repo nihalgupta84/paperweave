@@ -25,7 +25,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 80)
-    print("Corpus Converter System Check")
+    print("PaperWeave System Check")
     print("=" * 80)
 
     print("\n[Python]")

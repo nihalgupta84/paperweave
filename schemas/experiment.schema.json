@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "work_id", "document_id", "datasets", "metrics", "baselines", "implementation_details", "results", "ablations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "work_id": {"type": "string"},
+    "document_id": {"type": "string"},
+    "document_ids": {"type": "array", "items": {"type": "string"}},
+    "datasets": {"type": "array"},
+    "metrics": {"type": "array"},
+    "baselines": {"type": "array"},
+    "implementation_details": {"type": "array"},
+    "results": {"type": "array"},
+    "ablations": {"type": "array"}
+  },
+  "additionalProperties": false
+}

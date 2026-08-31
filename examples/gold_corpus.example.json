@@ -1,0 +1,10 @@
+{
+  "documents": [
+    {
+      "work_id": "work_replace_with_verified_id",
+      "taxonomy_ids": ["task.optical_flow", "method.raft_style"],
+      "datasets": ["Sintel"],
+      "metrics": ["EPE"]
+    }
+  ]
+}

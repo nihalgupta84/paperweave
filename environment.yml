@@ -1,4 +1,4 @@
-name: mineru
+name: paperweave-mineru-legacy
 channels:
   - conda-forge
 dependencies:

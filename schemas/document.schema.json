@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corpus-converter.local/schemas/document.schema.json",
+  "title": "Canonical document",
+  "type": "object",
+  "required": [
+    "document_id",
+    "work_id",
+    "sha256",
+    "format",
+    "version",
+    "title",
+    "authors",
+    "doi",
+    "arxiv_id",
+    "source_path",
+    "parser",
+    "block_count",
+    "asset_count"
+  ],
+  "properties": {
+    "document_id": {"type": "string", "pattern": "^doc_[0-9a-f]{16}$"},
+    "work_id": {"type": "string", "pattern": "^work_[0-9a-f]{16}$"},
+    "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "version": {"type": "string"},
+    "title": {"type": "string"},
+    "authors": {"type": "array", "items": {"type": "string"}},
+    "doi": {"type": ["string", "null"]},
+    "arxiv_id": {"type": ["string", "null"]},
+    "format": {"enum": ["pdf", "docx", "html"]},
+    "source_path": {"type": ["string", "null"]},
+    "parser": {"type": "object"},
+    "block_count": {"type": "integer", "minimum": 0},
+    "asset_count": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

@@ -1,4 +1,9 @@
-pymupdf
-pypdf
-tqdm
-rich
+# Compatibility install file. The canonical dependency definitions live in
+# pyproject.toml. From a checkout, use one of:
+#
+#   python -m pip install -e .
+#   python -m pip install -e ".[pdf]"
+#   python -m pip install -e ".[full]"
+#
+# Keep this file for older workflows that already reference it.
+-e .[full]

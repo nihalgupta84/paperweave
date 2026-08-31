@@ -6,6 +6,7 @@ BACKEND="pipeline"
 METHOD="auto"
 DEVICE="auto"
 FORCE="0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,25 +39,30 @@ done
 
 if [[ -z "$CORPUS_DIR" ]]; then
   echo "Usage:"
-  echo "  bash scripts/03_run_mineru_batch.sh --corpus-dir <target_corpus_dir> [--device auto|gpu|cpu] [--force]"
+  echo "  bash scripts/03_run_mineru_batch.sh --corpus-dir <target_corpus_dir> [--backend pipeline] [--method auto] [--device auto|gpu|cpu] [--force]"
   exit 1
 fi
 
-RAW_DIR="$CORPUS_DIR/raw_pdfs"
-MINERU_RAW="$CORPUS_DIR/mineru_raw"
+RAW_DIR="$CORPUS_DIR/pdfs"
+MINERU_RAW="$CORPUS_DIR/raw/mineru"
 LOGS="$CORPUS_DIR/logs"
+
+if [[ ! -d "$RAW_DIR" && -d "$CORPUS_DIR/raw_pdfs" ]]; then
+  echo "Using legacy PDF path: $CORPUS_DIR/raw_pdfs"
+  RAW_DIR="$CORPUS_DIR/raw_pdfs"
+fi
 
 mkdir -p "$MINERU_RAW" "$LOGS"
 
 if [[ ! -d "$RAW_DIR" ]]; then
-  echo "ERROR: raw_pdfs directory not found: $RAW_DIR"
+  echo "ERROR: PDF directory not found: $RAW_DIR"
   exit 2
 fi
 
 PDF_COUNT=$(find "$RAW_DIR" -type f \( -iname "*.pdf" -o -iname "*.PDF" \) | wc -l)
 if [[ "$PDF_COUNT" -eq 0 ]]; then
-  echo "ERROR: no PDFs found in $RAW_DIR"
-  exit 3
+  echo "No selected PDFs found in $RAW_DIR. MinerU is not needed for DOCX/HTML-only input."
+  exit 0
 fi
 
 if ! command -v mineru >/dev/null 2>&1; then
@@ -71,6 +77,7 @@ if [[ "$FORCE" == "0" ]]; then
     echo "PDF count: $PDF_COUNT"
     echo "Markdown count: $MD_COUNT"
     echo "Use --force to rerun."
+    python "$SCRIPT_DIR/06_build_knowledge.py" reconcile-mineru --corpus "$CORPUS_DIR"
     exit 0
   fi
 fi
@@ -97,12 +104,35 @@ echo "Device: $DEVICE"
 echo "Log: $LOG_FILE"
 echo
 
+set +e
 mineru \
   -p "$RAW_DIR" \
   -o "$MINERU_RAW" \
   -b "$BACKEND" \
   -m "$METHOD" \
   2>&1 | tee "$LOG_FILE"
+MINERU_EXIT=${PIPESTATUS[0]}
+set -e
+
+python "$SCRIPT_DIR/06_build_knowledge.py" reconcile-mineru --corpus "$CORPUS_DIR"
+
+COMPLETE_COUNT=$(python - "$CORPUS_DIR/manifests/documents.jsonl" <<'PY'
+import json, sys
+count = 0
+with open(sys.argv[1], encoding="utf-8") as handle:
+    for line in handle:
+        record = json.loads(line)
+        count += record.get("stages", {}).get("mineru", {}).get("status") == "complete"
+print(count)
+PY
+)
+
+if [[ "$MINERU_EXIT" -ne 0 && "$COMPLETE_COUNT" -eq 0 ]]; then
+  echo "ERROR: MinerU failed and no documents completed. Exit code: $MINERU_EXIT"
+  exit "$MINERU_EXIT"
+elif [[ "$MINERU_EXIT" -ne 0 ]]; then
+  echo "WARNING: MinerU returned $MINERU_EXIT, but $COMPLETE_COUNT document(s) completed; failed documents remain isolated in the manifest."
+fi
 
 echo
 echo "MinerU complete."

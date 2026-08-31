@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "work_id", "profile", "facets"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "work_id": {"type": "string"},
+    "profile": {"type": "string"},
+    "facets": {"type": "object", "additionalProperties": {"type": "array"}}
+  },
+  "additionalProperties": false
+}

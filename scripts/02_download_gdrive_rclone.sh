@@ -21,7 +21,7 @@ if ! command -v rclone >/dev/null 2>&1; then
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "ERROR: jq not found. Install jq so Google Drive PDFs can be selected by MIME type."
+  echo "ERROR: jq not found. Install jq so supported Google Drive documents can be selected by MIME type."
   exit 2
 fi
 
@@ -48,7 +48,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 DRIVE_LIST_JSON="$TMP_DIR/drive_lsjson.json"
-PDF_LIST_TSV="$TMP_DIR/pdf_paths.tsv"
+FILE_LIST_TSV="$TMP_DIR/document_paths.tsv"
 LOG_FILE="$OUT_DIR/rclone_download.log"
 : > "$LOG_FILE"
 
@@ -64,23 +64,28 @@ rclone lsjson "${REMOTE}:" \
   --recursive \
   > "$DRIVE_LIST_JSON"
 
-jq -r '.[] | select(.MimeType == "application/pdf") | [.Path, .Size] | @tsv' \
-  "$DRIVE_LIST_JSON" > "$PDF_LIST_TSV"
+jq -r '.[] | select(
+    .MimeType == "application/pdf" or
+    .MimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or
+    .MimeType == "text/html"
+  ) | [.Path, .Size, .MimeType] | @tsv' "$DRIVE_LIST_JSON" > "$FILE_LIST_TSV"
 
-PDF_REMOTE_COUNT="$(wc -l < "$PDF_LIST_TSV" | tr -d ' ')"
-echo "Remote PDFs found by MIME type: $PDF_REMOTE_COUNT"
+DOCUMENT_REMOTE_COUNT="$(wc -l < "$FILE_LIST_TSV" | tr -d ' ')"
+echo "Remote PDF/DOCX/HTML documents found by MIME type: $DOCUMENT_REMOTE_COUNT"
 
-if [[ "$PDF_REMOTE_COUNT" == "0" ]]; then
-  echo "ERROR: no Google Drive files with MIME type application/pdf were found."
+if [[ "$DOCUMENT_REMOTE_COUNT" == "0" ]]; then
+  echo "ERROR: no supported PDF, DOCX, or HTML documents were found."
   exit 3
 fi
 
-while IFS=$'\t' read -r REMOTE_PATH REMOTE_SIZE; do
+while IFS=$'\t' read -r REMOTE_PATH REMOTE_SIZE MIME_TYPE; do
   TARGET_PATH="$OUT_DIR/$REMOTE_PATH"
 
-  if [[ ! "$TARGET_PATH" =~ \.[Pp][Dd][Ff]$ ]]; then
-    TARGET_PATH="$TARGET_PATH.pdf"
-  fi
+  case "$MIME_TYPE" in
+    application/pdf) [[ "$TARGET_PATH" =~ \.[Pp][Dd][Ff]$ ]] || TARGET_PATH="$TARGET_PATH.pdf" ;;
+    application/vnd.openxmlformats-officedocument.wordprocessingml.document) [[ "$TARGET_PATH" =~ \.[Dd][Oo][Cc][Xx]$ ]] || TARGET_PATH="$TARGET_PATH.docx" ;;
+    text/html) [[ "$TARGET_PATH" =~ \.[Hh][Tt][Mm][Ll]?$ ]] || TARGET_PATH="$TARGET_PATH.html" ;;
+  esac
 
   mkdir -p "$(dirname "$TARGET_PATH")"
 
@@ -99,21 +104,23 @@ while IFS=$'\t' read -r REMOTE_PATH REMOTE_SIZE; do
     -P \
     --log-file "$LOG_FILE" \
     --log-level INFO
-done < "$PDF_LIST_TSV"
+done < "$FILE_LIST_TSV"
 
 MISSING_COUNT=0
-while IFS=$'\t' read -r REMOTE_PATH _; do
+while IFS=$'\t' read -r REMOTE_PATH _ MIME_TYPE; do
   TARGET_PATH="$OUT_DIR/$REMOTE_PATH"
 
-  if [[ ! "$TARGET_PATH" =~ \.[Pp][Dd][Ff]$ ]]; then
-    TARGET_PATH="$TARGET_PATH.pdf"
-  fi
+  case "$MIME_TYPE" in
+    application/pdf) [[ "$TARGET_PATH" =~ \.[Pp][Dd][Ff]$ ]] || TARGET_PATH="$TARGET_PATH.pdf" ;;
+    application/vnd.openxmlformats-officedocument.wordprocessingml.document) [[ "$TARGET_PATH" =~ \.[Dd][Oo][Cc][Xx]$ ]] || TARGET_PATH="$TARGET_PATH.docx" ;;
+    text/html) [[ "$TARGET_PATH" =~ \.[Hh][Tt][Mm][Ll]?$ ]] || TARGET_PATH="$TARGET_PATH.html" ;;
+  esac
 
   if [[ ! -s "$TARGET_PATH" ]]; then
-    echo "WARNING: expected downloaded PDF missing or empty: $TARGET_PATH"
+    echo "WARNING: expected downloaded document missing or empty: $TARGET_PATH"
     MISSING_COUNT=$((MISSING_COUNT + 1))
   fi
-done < "$PDF_LIST_TSV"
+done < "$FILE_LIST_TSV"
 
 if [[ "$MISSING_COUNT" -gt 0 ]]; then
   echo "ERROR: $MISSING_COUNT expected PDF(s) were not downloaded correctly."
@@ -122,5 +129,5 @@ fi
 
 echo
 echo "Download complete."
-echo "PDF count:"
-find "$OUT_DIR" -type f \( -iname "*.pdf" -o -iname "*.PDF" \) | wc -l
+echo "Supported document count:"
+find "$OUT_DIR" -type f \( -iname "*.pdf" -o -iname "*.docx" -o -iname "*.html" -o -iname "*.htm" \) | wc -l

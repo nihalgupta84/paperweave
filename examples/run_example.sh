@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /workspace/projects/language/corpus_converter
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(dirname "$SCRIPT_DIR")"
 
-source /workspace/miniconda3/etc/profile.d/conda.sh
-conda activate mineru
+# Activate the virtual environment created by the README, or run this script
+# from an already activated environment.
+if [[ -f .venv/bin/activate ]]; then
+  source .venv/bin/activate
+fi
 
 bash scripts/05_run_all.sh \
   --input "https://drive.google.com/drive/folders/YOUR_FOLDER_ID?usp=sharing" \
-  --corpus-dir /workspace/projects/vision/aqi_prediction/corpus \
+  --corpus-dir /path/to/project/corpus \
   --remote amity \
   --device gpu \
-  --rename-mode title
+  --rename-mode title \
+  --format-policy prefer-pdf \
+  --taxonomy-profile core

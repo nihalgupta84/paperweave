@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperweave"
+version = "0.2.0"
+description = "Evidence-backed research paper corpus normalization and synthesis"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "PaperWeave contributors"}]
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["research", "papers", "corpus", "MinerU", "literature-review"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+[project.urls]
+Homepage = "https://github.com/nihalgupta84/paperweave"
+Issues = "https://github.com/nihalgupta84/paperweave/issues"
+Source = "https://github.com/nihalgupta84/paperweave"
+
+[project.optional-dependencies]
+pdf = [
+  "PyMuPDF>=1.24",
+  "pypdf>=5",
+]
+full = [
+  "PyMuPDF>=1.24",
+  "pypdf>=5",
+  "tqdm>=4.66",
+  "rich>=13.7",
+  "mineru[all]>=3.4.0",
+]
+dev = [
+  "build>=1.2",
+  "jsonschema>=4.23",
+]
+
+[project.scripts]
+paperweave = "corpus_converter.cli:main"
+corpus-converter = "corpus_converter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["corpus_converter*"]
+
+[tool.setuptools.package-data]
+corpus_converter = ["taxonomies/**/*.json"]

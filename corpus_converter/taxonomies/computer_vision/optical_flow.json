@@ -1,0 +1,34 @@
+{
+  "task": {"task.optical_flow": ["optical flow"]},
+  "condition": {
+    "condition.low_light": ["low-light", "low light", "nighttime", "dark scenes"],
+    "condition.fog": ["fog", "foggy"],
+    "condition.haze": ["haze", "hazy"],
+    "condition.rain": ["rain", "rainy"],
+    "condition.snow": ["snow", "snowy"],
+    "condition.underwater": ["underwater"],
+    "condition.occlusion": ["occlusion", "occluded"],
+    "condition.large_displacement": ["large displacement", "large motion"],
+    "condition.domain_shift": ["domain shift"]
+  },
+  "method_family": {
+    "method.raft_style": ["raft", "all-pairs field transforms"],
+    "method.cost_volume": ["cost volume", "correlation volume"],
+    "method.pyramid": ["feature pyramid", "pyramid network"],
+    "method.mamba": ["mamba", "selective state space"]
+  },
+  "dataset": {
+    "dataset.sintel": ["mpi sintel", "sintel"],
+    "dataset.kitti_2012": ["kitti 2012", "kitti-2012"],
+    "dataset.kitti_2015": ["kitti 2015", "kitti-2015"],
+    "dataset.flyingchairs": ["flyingchairs", "flying chairs"],
+    "dataset.flyingthings3d": ["flyingthings3d", "flyingthings 3d"],
+    "dataset.hd1k": ["hd1k"],
+    "dataset.spring": ["spring dataset", "spring benchmark"]
+  },
+  "metric": {
+    "metric.epe": ["endpoint error", "end-point error", "epe"],
+    "metric.fl_all": ["fl-all", "fl all"],
+    "metric.fps": ["frames per second", "fps"]
+  }
+}
