@@ -147,7 +147,9 @@ def run_mineru(
         for record in load_manifest(corpus)
         if record.get("selected_for_extraction") and record.get("format") == "pdf"
     ]
-    pending = [record for record in selected if force or record.get("stages", {}).get("mineru", {}).get("status") != "complete"]
+    pending = [
+        record for record in selected if force or record.get("stages", {}).get("mineru", {}).get("status") != "complete"
+    ]
     if not selected:
         return {"status": "not_needed", "selected_pdfs": 0, "processed": 0}
     if not pending:
@@ -232,12 +234,24 @@ def run_pipeline(
 ) -> dict[str, Any]:
     """Run the complete installed-package workflow for local or Drive input."""
     corpus = corpus.expanduser().resolve()
-    for relative in ("downloaded", "pdfs", "sources", "papers", "records", "indexes", "collections", "synthesis", "logs", "manifests", "raw/mineru", "raw/grobid"):
+    for relative in (
+        "downloaded",
+        "pdfs",
+        "sources",
+        "papers",
+        "records",
+        "indexes",
+        "collections",
+        "synthesis",
+        "logs",
+        "manifests",
+        "raw/mineru",
+        "raw/grobid",
+    ):
         (corpus / relative).mkdir(parents=True, exist_ok=True)
 
     local_candidate = Path(input_value).expanduser()
     if local_candidate.exists():
-        drive_id = None
         drive = None
         input_path = local_candidate.resolve()
     elif _drive_folder_id(input_value):

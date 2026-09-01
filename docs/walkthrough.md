@@ -8,7 +8,7 @@ PDF category trees.
 
 ## Current Phase
 
-Backend v0.2.1 release candidate implemented and verified, including multi-format
+Backend v0.2.2 release candidate implemented and verified, including multi-format
 ingestion, GROBID enrichment, local hybrid retrieval, corpus graphs, model
 fallback, failure isolation, and an installed-package `paperweave run` workflow.
 Web access is planned separately.

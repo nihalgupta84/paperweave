@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-09-01
+
+- Remove a harmless unused workflow variable that failed clean CI linting.
+- Disable Ruff's cache in pre-commit hooks so auto-fix follow-up issues cannot
+  be hidden by a cached second run.
+
 ## [0.2.1] - 2026-09-01
 
 - Add `paperweave run` as a package-native end-to-end workflow, so PyPI users
