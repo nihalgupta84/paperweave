@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperweave"
-version = "0.2.0"
+version = "0.2.1"
 description = "Evidence-backed research paper corpus normalization and synthesis"
 readme = "README.md"
 license = "MIT"
@@ -27,8 +27,10 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/nihalgupta84/paperweave"
+Documentation = "https://github.com/nihalgupta84/paperweave#install-and-run-from-pypi"
 Issues = "https://github.com/nihalgupta84/paperweave/issues"
 Source = "https://github.com/nihalgupta84/paperweave"
+Changelog = "https://github.com/nihalgupta84/paperweave/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 pdf = [
@@ -40,7 +42,7 @@ full = [
   "pypdf>=5",
   "tqdm>=4.66",
   "rich>=13.7",
-  "mineru[all]>=3.4.0",
+  "mineru[pipeline]>=3.4.0,<4",
 ]
 dev = [
   "build>=1.2",

@@ -14,6 +14,7 @@ from corpus_converter.citation_graph import build_knowledge_graph
 from corpus_converter.grobid import GrobidAdapter, enrich_corpus_with_grobid, parse_tei
 from corpus_converter.ingestion import pdf_preflight
 from corpus_converter.io import read_json, write_json, write_jsonl
+from corpus_converter.pipeline import run_mineru, run_pipeline
 from corpus_converter.retrieval import build_search_index, search_corpus
 
 TEI = b"""<?xml version="1.0"?>
@@ -92,6 +93,52 @@ def make_document(corpus: Path, suffix: str, title: str, text: str, dataset: str
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_package_native_run_completes_html_corpus(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "papers"
+            corpus = root / "corpus"
+            source.mkdir()
+            (source / "study.html").write_text(
+                "<html><head><title>Underwater Image Enhancement Study</title></head><body>"
+                "<h1>Underwater Image Enhancement Study</h1><h2>Methodology</h2>"
+                f"<p>{'The proposed method improves underwater images using supervised learning. ' * 12}</p>"
+                "<h2>Experiments</h2>"
+                f"<p>{'Experiments on the UIEB dataset report PSNR and SSIM measurements. ' * 12}</p>"
+                "</body></html>",
+                encoding="utf-8",
+            )
+            result = run_pipeline(str(source), corpus)
+            self.assertEqual(result["mineru"]["status"], "not_needed")
+            self.assertEqual(result["postprocess"]["evidence"]["invalid"], 0)
+            self.assertTrue((corpus / "synthesis" / "methodology.md").is_file())
+            self.assertTrue((corpus / "synthesis" / "all_papers.md").is_file())
+
+    def test_package_native_run_explains_missing_mineru(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            corpus = Path(temporary)
+            pdf = corpus / "pdfs" / "paper.pdf"
+            pdf.parent.mkdir(parents=True)
+            pdf.write_bytes(b"%PDF-test")
+            write_jsonl(
+                corpus / "manifests" / "documents.jsonl",
+                [
+                    {
+                        "document_id": "doc_aaaaaaaaaaaaaaaa",
+                        "work_id": "work_aaaaaaaaaaaaaaaa",
+                        "sha256": "a" * 64,
+                        "format": "pdf",
+                        "canonical_path": "pdfs/paper.pdf",
+                        "selected_for_extraction": True,
+                    }
+                ],
+            )
+            with (
+                patch("corpus_converter.pipeline.shutil.which", return_value=None),
+                self.assertRaisesRegex(RuntimeError, r"paperweave\[full\]"),
+            ):
+                run_mineru(corpus)
+
     def test_grobid_http_client_sends_pdf_and_parses_response(self) -> None:
         requests: list[bytes] = []
 

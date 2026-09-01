@@ -78,6 +78,39 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # ── package-native end-to-end workflow ─────────────────────────
+    run_parser = subparsers.add_parser("run", help="Run the complete workflow from documents to reports.")
+    run_parser.add_argument("--input", required=True, help="Local file/folder or Google Drive folder URL/ID.")
+    run_parser.add_argument(
+        "--corpus",
+        "--corpus-dir",
+        required=True,
+        type=Path,
+        dest="corpus",
+        help="Output corpus directory (created when missing).",
+    )
+    run_parser.add_argument("--remote", help="rclone remote for Google Drive input.")
+    run_parser.add_argument("--device", choices=["auto", "gpu", "cpu"], default="auto")
+    run_parser.add_argument("--backend", default="pipeline", help="MinerU backend.")
+    run_parser.add_argument("--method", default="auto", help="MinerU parsing method.")
+    run_parser.add_argument("--rename-mode", choices=["title", "keep"], default="title")
+    run_parser.add_argument("--format-policy", choices=["prefer-pdf", "all"], default="prefer-pdf")
+    run_parser.add_argument("--taxonomy-profile", default="core")
+    run_parser.add_argument(
+        "--semantic-provider",
+        choices=["deterministic", "ollama", "openai-compatible"],
+        default="deterministic",
+    )
+    run_parser.add_argument("--model")
+    run_parser.add_argument("--base-url", help="OpenAI-compatible model endpoint.")
+    run_parser.add_argument("--strict-provider", action="store_true")
+    run_parser.add_argument("--grobid-url", help="Optional GROBID service URL.")
+    run_parser.add_argument("--strict-grobid", action="store_true")
+    run_parser.add_argument("--force", action="store_true", help="Rerun extraction, normalization, and analysis.")
+    run_parser.add_argument("--force-mineru", action="store_true")
+    run_parser.add_argument("--force-normalization", action="store_true")
+    run_parser.add_argument("--force-analysis", action="store_true")
+
     # ── ingest ──────────────────────────────────────────────────────
     ingest_parser = subparsers.add_parser("ingest", help="Discover, deduplicate, and stage documents.")
     ingest_parser.add_argument("--input", required=True, type=Path)
@@ -171,7 +204,33 @@ def main() -> None:
     args = parser.parse_args()
     setup_logging(verbose=args.verbose, quiet=args.quiet)
 
-    if args.command == "ingest":
+    if args.command == "run":
+        from .pipeline import run_pipeline
+
+        try:
+            result = run_pipeline(
+                args.input,
+                args.corpus,
+                remote=args.remote,
+                device=args.device,
+                backend=args.backend,
+                method=args.method,
+                rename_mode=args.rename_mode,
+                format_policy=args.format_policy,
+                taxonomy_profile=args.taxonomy_profile,
+                semantic_provider=args.semantic_provider,
+                model=args.model,
+                base_url=args.base_url,
+                strict_provider=args.strict_provider,
+                grobid_url=args.grobid_url,
+                strict_grobid=args.strict_grobid,
+                force_mineru=args.force or args.force_mineru,
+                force_normalization=args.force or args.force_normalization,
+                force_analysis=args.force or args.force_analysis,
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            parser.exit(2, f"paperweave: error: {error}\n")
+    elif args.command == "ingest":
         input_path = args.input.expanduser().resolve()
         if not input_path.exists():
             parser.error(f"Input path does not exist: {input_path}")

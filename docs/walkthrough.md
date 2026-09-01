@@ -8,9 +8,10 @@ PDF category trees.
 
 ## Current Phase
 
-Backend v0.2 release candidate implemented and verified, including multi-format
+Backend v0.2.1 release candidate implemented and verified, including multi-format
 ingestion, GROBID enrichment, local hybrid retrieval, corpus graphs, model
-fallback, and failure isolation. Web access is planned separately.
+fallback, failure isolation, and an installed-package `paperweave run` workflow.
+Web access is planned separately.
 
 ## Pipeline
 
@@ -18,6 +19,10 @@ fallback, and failure isolation. Web access is planned separately.
 PDF/DOCX/HTML -> dedup/work selection -> parser adapter -> normalized papers -> sections -> records
      -> taxonomy -> collections -> six core reports + search index + paper/knowledge graphs
 ```
+
+PyPI users run this pipeline with `paperweave run --input ... --corpus ...`.
+Repository shell scripts are compatibility/development tools, not a requirement
+for installed-package use.
 
 The trusted extraction layer is deterministic and extractive. Rich model-authored
 narrative synthesis remains optional rather than being mixed into source records.
@@ -62,6 +67,15 @@ produced 163 blocks and 12 assets, validated 26/26 evidence locators, generated
 five collections and all six core reports, indexed 147 searchable blocks with
 FTS5, returned relevant hybrid-search results, and generated the paper and
 heterogeneous knowledge graphs.
+
+For v0.2.1, the built wheel was installed into a clean Python 3.10 environment
+and `paperweave run` completed an HTML corpus through normalization, evidence
+validation, all reports, search, and graph generation without access to the
+source repository. The same command was then run against the retained real PDF
+corpus in the MinerU environment: it correctly detected the completed MinerU
+output, skipped expensive re-extraction, retained 163 normalized blocks, and
+completed postprocessing with zero invalid evidence locators. Python 3.10 also
+successfully resolves the focused `paperweave[full]` MinerU pipeline extra.
 
 ## Next Steps
 

@@ -29,7 +29,7 @@ def request_json(
 
 
 def compute_capabilities() -> dict[str, Any]:
-    """Detect available compute resources (NVIDIA GPU, CUDA, Ollama CLI)."""
+    """Detect available compute resources and optional workflow commands."""
     gpu = {"available": False, "name": None, "memory_mb": None}
     if shutil.which("nvidia-smi"):
         try:
@@ -60,7 +60,15 @@ def compute_capabilities() -> dict[str, Any]:
         except Exception as e:
             logger.debug("torch cuda check failed: %s", e)
 
-    return {"gpu": gpu, "ollama_command": bool(shutil.which("ollama"))}
+    return {
+        "gpu": gpu,
+        "commands": {
+            "mineru": shutil.which("mineru"),
+            "rclone": shutil.which("rclone"),
+            "ollama": shutil.which("ollama"),
+        },
+        "ollama_command": bool(shutil.which("ollama")),
+    }
 
 
 @dataclass

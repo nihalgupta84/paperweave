@@ -24,7 +24,9 @@ respectively; neither is the canonical knowledge representation.
 The deterministic end-to-end MVP is implemented through Phase 5. It has been
 verified with synthetic MinerU v2 fixtures and a real MinerU 3.4.0 legacy corpus.
 Phase 6 metadata enrichment, local hybrid retrieval, and explainable corpus
-graphs are implemented as optional or automatically generated extensions.
+graphs are implemented as optional or automatically generated extensions. The
+complete pipeline is exposed through the installed `paperweave run` command;
+repository shell scripts are no longer required for normal use.
 
 ## Open-Source Hardening Status
 
@@ -43,6 +45,8 @@ Implemented:
 11. Synthetic tests spanning MinerU v2, PDF deduplication, DOCX, HTML,
     unsupported files, format preference, and unavailable-model fallback.
 12. Native DOCX and HTML adapters producing the canonical block schema.
+13. Package-native local and rclone/Google Drive orchestration from ingestion
+    through reports, search indexes, and graphs.
 
 Exact duplicates inside a corpus are quarantined recoverably before extraction.
 Distinct PDF versions are retained as documents under one work; equivalent

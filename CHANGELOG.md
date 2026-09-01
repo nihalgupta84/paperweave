@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1] - 2026-09-01
+
+- Add `paperweave run` as a package-native end-to-end workflow, so PyPI users
+  no longer depend on repository shell scripts.
+- Move MinerU normalization into the installed Python package while retaining a
+  compatibility wrapper for cloned repositories.
+- Add package-native Google Drive ingestion through rclone.
+- Replace MinerU's very broad `all` extra with the focused `pipeline` backend
+  required by PaperWeave's default PDF workflow.
+- Explain base versus PDF/full installations and provide actionable missing-
+  MinerU and executable-path errors.
+- Rewrite the README around separate PyPI-user and source-development paths.
+
 ## [0.2.0] - 2026-09-01
 
 - Preserve prior manifest records when ingesting one new file or a partial folder.
