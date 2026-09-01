@@ -22,6 +22,7 @@
     "heading_level": {"type": ["integer", "null"], "minimum": 1},
     "page_index": {"type": ["integer", "null"], "minimum": 0},
     "section_path": {"type": "array", "items": {"type": "string"}},
+    "section_role": {"type": "string"},
     "text": {"type": "string"},
     "bbox": {
       "type": ["array", "null"],

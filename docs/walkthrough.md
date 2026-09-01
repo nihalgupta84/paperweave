@@ -8,14 +8,15 @@ PDF category trees.
 
 ## Current Phase
 
-End-to-end open-source MVP implemented and verified, including multi-format
-ingestion, pre-extraction deduplication, model fallback, and failure isolation.
+Backend v0.2 release candidate implemented and verified, including multi-format
+ingestion, GROBID enrichment, local hybrid retrieval, corpus graphs, model
+fallback, and failure isolation. Web access is planned separately.
 
 ## Pipeline
 
 ```text
 PDF/DOCX/HTML -> dedup/work selection -> parser adapter -> normalized papers -> sections -> records
-     -> taxonomy -> collections -> five synthesis reports
+     -> taxonomy -> collections -> six core reports + search index + paper/knowledge graphs
 ```
 
 The trusted extraction layer is deterministic and extractive. Rich model-authored
@@ -28,21 +29,43 @@ narrative synthesis remains optional rather than being mixed into source records
 - `corpus/papers/<document_id>` is the clean document store.
 - SHA-256-derived document IDs are stable across title corrections.
 - Exact normalized-title matches share a work ID; fuzzy matches remain explicit
-  review candidates rather than being merged automatically.
+  review candidates. Automatic merging additionally requires an exact DOI or
+  arXiv match and retains recoverable pre-merge snapshots.
 - Taxonomy folders will be generated views, not physical PDF organization.
-- Graph and vector-database integrations are deferred until structured records
-  and evidence validation are reliable.
+- The graph distinguishes verified citations, fuzzy-title candidates, computed
+  related-paper links, and dataset/taxonomy knowledge edges.
+- Local search combines SQLite FTS5 and hashed TF-IDF vectors without requiring
+  a model or GPU. Neural embeddings remain an optional future backend.
+- GROBID is optional and fills missing metadata without hiding conflicts.
 
 ## Immediate Acceptance Test
 
 Completed on synthetic MinerU v2 fixtures and a real legacy MinerU 3.4.0 corpus.
 The real run normalized 12 papers and 2,782 blocks, validated 746 evidence
 references with zero invalid references, generated 19 collections, and wrote all
-five synthesis reports.
+six synthesis reports.
+
+The v0.2 backend was additionally rerun on two retained real medical-imaging
+PDFs and their MinerU 3.4.0 artifacts. It normalized 491 blocks and 99 assets,
+validated 68/68 evidence locators, generated nine collections and all six core
+reports, indexed 421 searchable text blocks with FTS5 enabled, returned grounded
+hybrid-search results, and produced one related-paper link plus an 11-node,
+15-edge heterogeneous knowledge graph. No live GROBID server was installed; the
+optional probe returned a non-fatal unavailable result as designed, while the
+HTTP client and TEI parsing are covered by a local integration server test.
+
+A fresh end-to-end MinerU 3.4.0 GPU extraction was then run for v0.2 on an
+11-page rectal-cancer segmentation paper (rather than reusing retained parser
+artifacts). Ingestion, extraction, reconciliation, normalization, and
+postprocessing all completed without failed or review-needed documents. The run
+produced 163 blocks and 12 assets, validated 26/26 evidence locators, generated
+five collections and all six core reports, indexed 147 searchable blocks with
+FTS5, returned relevant hybrid-search results, and generated the paper and
+heterogeneous knowledge graphs.
 
 ## Next Steps
 
 1. Review taxonomy aliases and extracted reports for the target research domain.
-2. Add another domain taxonomy only when a project requires it.
-3. Evaluate the optional structured-output enrichment against a manually
+2. Evaluate the optional structured-output enrichment against a manually
    annotated gold corpus before relying on inferred claims in a paper.
+3. Implement the local-first web milestone in `docs/web_roadmap.md`.

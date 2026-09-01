@@ -15,6 +15,8 @@ TAXONOMY_PROFILE="core"
 SEMANTIC_PROVIDER="deterministic"
 SEMANTIC_MODEL=""
 SEMANTIC_BASE_URL=""
+GROBID_URL=""
+STRICT_GROBID="0"
 
 usage() {
   cat <<'USAGE'
@@ -30,6 +32,8 @@ Options:
   --semantic-provider PROVIDER           deterministic, ollama, or openai-compatible
   --model NAME                           optional semantic model
   --base-url URL                         optional OpenAI-compatible endpoint
+  --grobid-url URL                       optional GROBID service, e.g. http://127.0.0.1:8070
+  --strict-grobid                        fail the run when configured GROBID is unavailable
   --force                                rerun all expensive stages
   --force-mineru                         rerun MinerU only
   --force-normalization                  rerun normalization only
@@ -109,6 +113,14 @@ while [[ $# -gt 0 ]]; do
       SEMANTIC_BASE_URL="$2"
       shift 2
       ;;
+    --grobid-url)
+      GROBID_URL="$2"
+      shift 2
+      ;;
+    --strict-grobid)
+      STRICT_GROBID="1"
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -146,7 +158,7 @@ LOCAL_INPUT="$INPUT"
 
 if [[ "$INPUT" == *"drive.google.com"* || "$INPUT" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
   echo
-  echo "[1/5] Google Drive input detected. Downloading supported documents with rclone..."
+  echo "[1/6] Google Drive input detected. Downloading supported documents with rclone..."
   if [[ -z "$REMOTE" ]]; then
     mapfile -t CONFIGURED_REMOTES < <(rclone listremotes | sed 's/:$//')
     if [[ "${#CONFIGURED_REMOTES[@]}" -ne 1 ]]; then
@@ -159,11 +171,11 @@ if [[ "$INPUT" == *"drive.google.com"* || "$INPUT" =~ ^[A-Za-z0-9_-]{20,}$ ]]; t
   LOCAL_INPUT="$CORPUS_DIR/downloaded"
 else
   echo
-  echo "[1/5] Local input detected."
+  echo "[1/6] Local input detected."
 fi
 
 echo
-echo "[2/5] Preparing documents, deduplicating, and writing the manifest..."
+echo "[2/6] Preparing documents, deduplicating, and writing the manifest..."
 if [[ "$FORCE" == "1" ]]; then
   python "$SCRIPT_DIR/01_prepare_inputs.py" \
     --input "$LOCAL_INPUT" \
@@ -180,7 +192,7 @@ else
 fi
 
 echo
-echo "[3/5] Running MinerU batch..."
+echo "[3/6] Running MinerU batch..."
 if [[ "$FORCE_MINERU" == "1" ]]; then
   bash "$SCRIPT_DIR/03_run_mineru_batch.sh" \
     --corpus-dir "$CORPUS_DIR" \
@@ -193,7 +205,7 @@ else
 fi
 
 echo
-echo "[4/5] Formatting MinerU output..."
+echo "[4/6] Formatting MinerU output..."
 if [[ "$FORCE_NORMALIZATION" == "1" ]]; then
   python "$SCRIPT_DIR/04_format_mineru_output.py" \
     --corpus-dir "$CORPUS_DIR" \
@@ -203,8 +215,16 @@ else
     --corpus-dir "$CORPUS_DIR"
 fi
 
+if [[ -n "$GROBID_URL" ]]; then
+  echo
+  echo "[5/6] Enriching scholarly metadata with GROBID..."
+  GROBID_ARGS=(grobid --corpus "$CORPUS_DIR" --base-url "$GROBID_URL")
+  [[ "$STRICT_GROBID" != "1" ]] || GROBID_ARGS+=(--strict)
+  python "$SCRIPT_DIR/06_build_knowledge.py" "${GROBID_ARGS[@]}"
+fi
+
 echo
-echo "[5/5] Building knowledge records, collections, and synthesis..."
+echo "[6/6] Building knowledge records, search index, graphs, collections, and synthesis..."
 POSTPROCESS_ARGS=(
   postprocess
   --corpus "$CORPUS_DIR"

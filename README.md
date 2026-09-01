@@ -45,14 +45,15 @@ It is the reliable layer between downloaded documents and literature analysis.
 ```bash
 git clone https://github.com/nihalgupta84/paperweave.git
 cd paperweave
-python -m venv .venv
+uv venv --python 3.11 .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[full]"
+uv pip install -e ".[full]"
 ```
 
 `.[full]` installs the complete PDF workflow, including MinerU. For DOCX/HTML
-and deterministic analysis only, use `python -m pip install -e .` instead.
+and deterministic analysis only, use `uv pip install -e .` instead. Install
+[`uv`](https://docs.astral.sh/uv/getting-started/installation/) first if the
+command is not already available.
 
 ### 2. Run
 
@@ -75,6 +76,7 @@ Open these files:
 ├── experiments.md
 ├── datasets.md
 ├── literature_review.md
+├── references.md
 └── all_papers.md
 ```
 
@@ -90,12 +92,14 @@ my_project/
     ├── sources/        ← selected DOCX/HTML sources
     ├── papers/         ← clean Markdown, blocks, and assets
     ├── records/        ← work/document facts with evidence
+    ├── indexes/        ← local SQLite lexical/vector search
     ├── collections/    ← generated multi-facet indexes
-    └── synthesis/      ← five review-ready reports
+    └── synthesis/      ← review-ready reports and paper graph
 ```
 
-Run it again after adding papers. Existing exact duplicates are not processed
-again, and successful documents remain usable if another document fails.
+Run it again after adding papers—even with a path to one new file. Existing
+manifest records are preserved, exact duplicates are not processed again, and
+successful documents remain usable if another document fails.
 
 ## 🧩 What happens to your files?
 
@@ -112,7 +116,9 @@ again, and successful documents remain usable if another document fails.
 | No local LLM | Use deterministic extraction and record the fallback |
 
 Use `--format-policy all` when you want every distinct representation
-normalized. Fuzzy title matches are flagged for review, never silently merged.
+normalized. Fuzzy title matches are flagged for review. Automatic merging is
+allowed only when both the title threshold and an exact DOI or arXiv identifier
+agree; every merge retains snapshots under `quarantine/merged_works/`.
 
 ## ☁️ Google Drive (optional)
 
@@ -127,7 +133,7 @@ bash scripts/05_run_all.sh \
 
 If exactly one rclone remote is configured, PaperWeave selects it automatically.
 If you have several, add `--remote <your-rclone-remote>`. The helper uses
-[rclone](https://github.com/rclone/rclone) and `jq`; 
+[rclone](https://github.com/rclone/rclone) and `jq`;
 
 ## 🧠 Optional local intelligence
 
@@ -143,7 +149,54 @@ paperweave postprocess \
 
 If the provider is unavailable, the pipeline falls back to deterministic output
 and records the reason in `corpus/manifests/last_run.json`. Use
-`--strict-provider` only when fallback should be an error.
+`--strict-provider` only when fallback should be an error. Model-generated items
+with valid block IDs are marked `evidence_cited_unverified`: a valid citation
+proves traceability, not that the cited text semantically entails the claim.
+
+GROBID can optionally improve scholarly metadata and bibliography extraction:
+
+```bash
+paperweave grobid \
+  --corpus /path/to/my_project/corpus \
+  --base-url http://127.0.0.1:8070
+```
+
+Conflicting GROBID values never silently replace canonical metadata. Raw TEI,
+parsed metadata, and conflicts are retained under `corpus/raw/grobid/`. Add
+`--grobid-url` to the one-command script to run this stage automatically.
+
+## 🔎 Local search and paper maps
+
+Postprocessing automatically builds a CPU-only SQLite index and corpus graph.
+Search exact terms and related passages without an API key:
+
+```bash
+paperweave search --corpus /path/to/project/corpus "low-light optical flow"
+paperweave search --corpus /path/to/project/corpus "KITTI EPE" --mode lexical
+paperweave search --corpus /path/to/project/corpus "efficient flow" --mode vector
+```
+
+The default hybrid ranking fuses SQLite FTS5 with a deterministic hashed TF-IDF
+vector. This is lightweight and reproducible, but it is not a neural semantic
+embedding model. Larger future deployments can replace it with Qdrant or another
+embedding backend.
+
+When at least two papers are available, PaperWeave creates:
+
+- directed in-corpus citation links, separated into identifier-verified and
+  fuzzy-title candidate edges;
+- explainable related-paper links using taxonomy, datasets, methodology text,
+  and shared references;
+- a heterogeneous knowledge graph connecting papers to datasets and taxonomy
+  entities;
+- JSON and GraphML exports for custom interfaces, NetworkX, Gephi, or Cytoscape.
+
+```bash
+paperweave graph --corpus /path/to/project/corpus
+```
+
+This provides corpus-local discovery inspired by the workflow of paper-mapping
+tools; it does not query, clone, or claim parity with Connected Papers or Litmaps.
 
 ## 🔍 Why it is different
 
@@ -165,7 +218,14 @@ gap analysis, and agent-assisted reading with minimal code.
 
 ```bash
 paperweave capabilities
+paperweave --version
 paperweave --help
+paperweave review --corpus /path/to/project/corpus --interactive
+paperweave graph --corpus /path/to/project/corpus
+paperweave index --corpus /path/to/project/corpus
+paperweave search --corpus /path/to/project/corpus "query"
+paperweave grobid --corpus /path/to/project/corpus
+paperweave export --corpus /path/to/project/corpus --format bibtex --output corpus.bib
 bash scripts/05_run_all.sh --help
 bash scripts/99_status.sh /path/to/my_project/corpus
 ```
@@ -178,15 +238,15 @@ Stage controls are available when only part of a corpus needs work:
 
 | Install | Best for |
 | --- | --- |
-| `python -m pip install -e .` | DOCX/HTML and deterministic CPU analysis |
-| `python -m pip install -e ".[pdf]"` | PDF metadata helpers |
-| `python -m pip install -e ".[full]"` | Complete PDF + MinerU workflow |
-| `python -m pip install -e ".[dev]"` | Tests, builds, and release checks |
+| `uv pip install -e .` | DOCX/HTML and schema-validated deterministic CPU analysis |
+| `uv pip install -e ".[pdf]"` | PDF metadata helpers |
+| `uv pip install -e ".[full]"` | Complete PDF + MinerU workflow |
+| `uv pip install -e ".[dev]"` | Tests, builds, and release checks |
 
-After the first PyPI release:
+From PyPI:
 
 ```bash
-python -m pip install "paperweave[full]"
+uv pip install "paperweave[full]"
 ```
 
 GPU acceleration is optional. No API key is needed for the default workflow.
@@ -195,8 +255,12 @@ GPU acceleration is optional. No API key is needed for the default workflow.
 
 PaperWeave does not claim that an extracted fact is scientifically true; it
 makes the source evidence inspectable. Review documents marked `review_needed`
-in `quality.json`. Automatic fuzzy work merging, citation-graph enrichment,
-vector retrieval, and figure-to-pipeline reconstruction are future extensions.
+in `quality.json`. Citation edges based only on fuzzy titles are marked
+`candidate`; identifier-confirmed edges are marked `verified`. Related-paper
+scores are discovery aids, not citation evidence. The built-in sparse vector
+index is lexical rather than neural-semantic. Figure-to-pipeline reconstruction,
+hosted multi-user service, and large-scale external citation discovery remain
+future extensions.
 
 Do not commit downloaded papers or generated corpora unless their licenses allow
 redistribution. The repository’s `.gitignore` is designed for project-local
@@ -212,8 +276,8 @@ PaperWeave uses or interoperates with:
 - [Ollama](https://github.com/ollama/ollama) for optional local model serving.
 - [vLLM](https://github.com/vllm-project/vllm) for compatible optional inference
   endpoints.
-- [GROBID](https://github.com/kermitt2/grobid) as a planned optional scholarly
-  metadata adapter; it is not required by the current pipeline.
+- [GROBID](https://github.com/kermitt2/grobid) through an optional scholarly
+  metadata and bibliography adapter; it is not required by the core pipeline.
 
 Please follow each upstream project’s own license and citation guidance. See
 [`CITATION.cff`](CITATION.cff) for citing PaperWeave.
@@ -221,7 +285,9 @@ Please follow each upstream project’s own license and citation guidance. See
 ## 👩‍💻 Development and release
 
 ```bash
-python -m pip install -e ".[dev]"
+uv pip install -e ".[dev]"
+python -m ruff check .
+python -m ruff format --check .
 python -m unittest discover -s tests -v
 python -m build
 python -m twine check dist/*

@@ -18,7 +18,7 @@
       "properties": {
         "statement": {"type": "string"},
         "support_status": {
-          "enum": ["supported", "partially_supported", "ambiguous", "unsupported", "not_reported"]
+          "enum": ["supported", "evidence_cited_unverified", "partially_supported", "ambiguous", "unsupported", "not_reported"]
         },
         "evidence": {"type": "array", "items": {"$ref": "#/$defs/locator"}}
       },

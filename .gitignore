@@ -23,7 +23,7 @@ logs/
 nohup.out
 *.pid
 
-# Local corpus outputs
+# Local corpus outputs (do NOT commit corpus data)
 raw_pdfs/
 downloaded/
 mineru_raw/
@@ -44,18 +44,21 @@ workspaces/
 *.webp
 *.tiff
 *.bmp
-*.jsonl
 
-# Keep project docs/scripts
+# Keep project docs/scripts/examples/schemas
 !README.md
 !.gitignore
-!environment.yml
-!requirements-extra.txt
 !scripts/
 !examples/
+!schemas/
 !scripts/*.py
 !scripts/*.sh
 !examples/*.sh
+!examples/*.json
+!examples/sample_output/
+!examples/sample_output/manifests/
+!examples/sample_output/manifests/*.jsonl
+!schemas/*.json
 
 # OS/editor
 .DS_Store

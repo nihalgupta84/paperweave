@@ -6,14 +6,20 @@ import hashlib
 import json
 import shutil
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from corpus_converter.hashing import sha256_file
+from corpus_converter.io import read_json as load_json
+from corpus_converter.io import read_jsonl as load_jsonl
+from corpus_converter.io import write_jsonl
 from corpus_converter.manifest import update_stage
 from corpus_converter.quality import assess_document
+from corpus_converter.validation import validate_block, validate_document
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -22,44 +28,11 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def sha256_file(path: Path | None) -> str | None:
+def sha256_file_optional(path: Path | None) -> str | None:
+    """Wrapper that returns None for missing paths instead of raising."""
     if not path or not path.exists():
         return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def load_json(path: Path | None) -> Any:
-    if not path or not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8", errors="ignore"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def load_jsonl(path: Path) -> list[dict[str, Any]]:
-    records = []
-    if not path.exists():
-        return records
-    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            records.append(value)
-    return records
-
-
-def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return sha256_file(path)
 
 
 def find_largest(directory: Path, patterns: list[str]) -> Path | None:
@@ -101,7 +74,7 @@ def flatten_content(value: Any, inherited_page: int | None = None) -> Iterable[d
             yield from flatten_content(value[key], page)
     if not children_found:
         for child in value.values():
-            if isinstance(child, (list, dict)):
+            if isinstance(child, list | dict):
                 yield from flatten_content(child, page)
 
 
@@ -111,7 +84,7 @@ def content_text(value: Any) -> list[str]:
         for key, child in value.items():
             if key == "content" and isinstance(child, str) and child.strip():
                 parts.append(child.strip())
-            elif isinstance(child, (dict, list)):
+            elif isinstance(child, dict | list):
                 parts.extend(content_text(child))
     elif isinstance(value, list):
         for child in value:
@@ -134,13 +107,13 @@ def block_text(block: dict[str, Any]) -> str:
             parts.append(value.strip())
         elif isinstance(value, list):
             parts.extend(str(item).strip() for item in value if str(item).strip())
-    if not parts and isinstance(block.get("content"), (dict, list)):
+    if not parts and isinstance(block.get("content"), dict | list):
         parts.extend(content_text(block["content"]))
     return "\n".join(dict.fromkeys(parts))
 
 
 def normalize_bbox(value: Any) -> list[float] | None:
-    if not isinstance(value, (list, tuple)) or len(value) != 4:
+    if not isinstance(value, list | tuple) or len(value) != 4:
         return None
     try:
         return [float(item) for item in value]
@@ -174,11 +147,7 @@ def normalize_blocks(content_json: Path | None, document_id: str, parser_version
     blocks = []
     data = load_json(content_json)
     if isinstance(data, list) and data and all(isinstance(page, list) for page in data):
-        raw_blocks = (
-            block
-            for page_index, page in enumerate(data)
-            for block in flatten_content(page, page_index)
-        )
+        raw_blocks = (block for page_index, page in enumerate(data) for block in flatten_content(page, page_index))
     else:
         raw_blocks = flatten_content(data)
     for index, block in enumerate(raw_blocks):
@@ -188,8 +157,10 @@ def normalize_blocks(content_json: Path | None, document_id: str, parser_version
                 "document_id": document_id,
                 "type": str(block.get("type") or "unknown").lower(),
                 "heading_level": as_int(
-                    block.get("text_level", block.get("content", {}).get("level")
-                    if isinstance(block.get("content"), dict) else None)
+                    block.get(
+                        "text_level",
+                        block.get("content", {}).get("level") if isinstance(block.get("content"), dict) else None,
+                    )
                 ),
                 "page_index": as_int(block.get("page_idx", block.get("page", block.get("page_no")))),
                 "section_path": [],
@@ -259,7 +230,7 @@ def manifest_indexes(records):
 
 
 def identify_document(paper_root, origin_pdf, by_stem, by_hash):
-    digest = sha256_file(origin_pdf)
+    digest = sha256_file_optional(origin_pdf)
     record = by_hash.get(digest) if digest else None
     record = record or by_stem.get(paper_root.name)
     if record:
@@ -290,10 +261,7 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
     if not main_md:
         print(f"NO_MD: {paper_root}")
         return "failed", None
-    v1_files = [
-        path for path in auto_dir.glob("*content_list*.json")
-        if "content_list_v2" not in path.name
-    ]
+    v1_files = [path for path in auto_dir.glob("*content_list*.json") if "content_list_v2" not in path.name]
     content_json = max(v1_files, key=lambda path: path.stat().st_size) if v1_files else None
     content_json = content_json or find_largest(auto_dir, ["*content_list_v2*.json"])
     origin_pdf = find_largest(auto_dir, ["*_origin.pdf", "*.pdf"])
@@ -311,6 +279,8 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
         update_stage(record, "normalization", "failed", error="No MinerU content blocks found")
         print(f"NO_BLOCKS: {paper_root}")
         return "failed", document_id
+    for block in blocks:
+        validate_block(block)
     asset_map = copy_assets(auto_dir, paper_dir, blocks)
     markdown = rewrite_markdown_assets(main_md.read_text(encoding="utf-8", errors="ignore"), asset_map)
     (paper_dir / "paper.md").write_text(markdown, encoding="utf-8")
@@ -318,13 +288,14 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
     document = {
         "document_id": document_id,
         "work_id": record.get("work_id") or document_id.replace("doc_", "work_", 1),
-        "sha256": record.get("sha256") or sha256_file(origin_pdf),
+        "sha256": record.get("sha256") or sha256_file_optional(origin_pdf),
         "format": "pdf",
         "version": "unknown",
         "title": record.get("title") or paper_root.name,
-        "authors": [],
-        "doi": None,
-        "arxiv_id": None,
+        "authors": record.get("authors", []),
+        "year": record.get("year"),
+        "doi": record.get("doi"),
+        "arxiv_id": record.get("arxiv_id"),
         "source_path": record.get("canonical_path") or record.get("pdf_path"),
         "parser": {
             "name": "mineru",
@@ -337,6 +308,7 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
         "block_count": len(blocks),
         "asset_count": len(set(asset_map.values())),
     }
+    validate_document(document)
     (paper_dir / "document.json").write_text(
         json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -387,16 +359,12 @@ def main() -> None:
     print(f"Found MinerU paper folders: {len(paper_roots)}")
     for index, paper_root in enumerate(paper_roots, 1):
         print(f"[{index}/{len(paper_roots)}] {paper_root.name}")
-        status, document_id = format_one(
-            paper_root, papers_dir, by_stem, by_hash, args.parser_version, args.force
-        )
+        status, document_id = format_one(paper_root, papers_dir, by_stem, by_hash, args.parser_version, args.force)
         counts[status] += 1
         if document_id:
             statuses[document_id] = "complete" if status in {"done", "skipped"} else "failed"
 
-    records_by_id = {
-        record.get("document_id"): record for record in records if record.get("document_id")
-    }
+    records_by_id = {record.get("document_id"): record for record in records if record.get("document_id")}
     for record in records:
         if (
             record.get("selected_for_extraction")
@@ -417,7 +385,8 @@ def main() -> None:
                 "sha256": document.get("sha256"),
                 "canonical_path": document.get("source_path") or document.get("source_pdf"),
                 "file_name": Path(document.get("source_path") or document.get("source_pdf")).name
-                if (document.get("source_path") or document.get("source_pdf")) else None,
+                if (document.get("source_path") or document.get("source_pdf"))
+                else None,
                 "title": document.get("title"),
                 "status": "ready",
                 "normalization_status": "complete",

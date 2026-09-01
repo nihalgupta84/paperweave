@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["document_id", "work_id", "sha256", "format", "version", "title", "authors", "year", "doi", "arxiv_id", "source_path", "parser", "block_count", "asset_count"],
+  "properties": {
+    "document_id": {"type": "string", "pattern": "^doc_[0-9a-f]{16}$"},
+    "work_id": {"type": "string", "pattern": "^work_[0-9a-f]{16}$"},
+    "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "format": {"enum": ["pdf", "docx", "html"]},
+    "version": {"type": "string"},
+    "title": {"type": "string", "minLength": 1},
+    "authors": {"type": "array", "items": {"type": "string"}},
+    "year": {"type": ["integer", "null"], "minimum": 1000, "maximum": 9999},
+    "doi": {"type": ["string", "null"]},
+    "arxiv_id": {"type": ["string", "null"]},
+    "source_path": {"type": ["string", "null"]},
+    "parser": {"type": "object"},
+    "block_count": {"type": "integer", "minimum": 0},
+    "asset_count": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

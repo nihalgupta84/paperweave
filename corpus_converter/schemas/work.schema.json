@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "work_id", "title", "authors", "year", "doi", "arxiv_id", "document_ids", "merge_status"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "work_id": {"type": "string", "pattern": "^work_[0-9a-f]{16}$"},
+    "title": {"type": "string", "minLength": 1},
+    "authors": {"type": "array", "items": {"type": "string"}},
+    "year": {"type": ["integer", "null"], "minimum": 1000, "maximum": 9999},
+    "doi": {"type": ["string", "null"]},
+    "arxiv_id": {"type": ["string", "null"]},
+    "document_ids": {"type": "array", "items": {"type": "string", "pattern": "^doc_[0-9a-f]{16}$"}},
+    "merge_status": {"type": "string"},
+    "merge_reason": {"type": "string"}
+  },
+  "additionalProperties": false
+}

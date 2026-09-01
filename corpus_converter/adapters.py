@@ -1,23 +1,41 @@
+"""Parser adapters for non-PDF formats (DOCX, HTML) and layout normalization."""
+
+from __future__ import annotations
+
 import hashlib
+import logging
 import re
 import shutil
 import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree
 
 from .io import write_json, write_jsonl
 from .manifest import load_manifest, now, record_error, save_manifest, update_stage
 from .quality import assess_document
+from .validation import validate_block, validate_document
+
+logger = logging.getLogger(__name__)
 
 
 def block_id(document_id: str, index: int, text: str, block_type: str) -> str:
+    """Generate a deterministic block ID from document ID, position, type, and text content."""
     value = f"{document_id}\0{index}\0{block_type}\0{text}".encode()
     return f"blk_{hashlib.sha256(value).hexdigest()[:20]}"
 
 
-def normalized_block(document_id: str, index: int, text: str, block_type: str, level, parser: str):
-    return {
+def normalized_block(
+    document_id: str,
+    index: int,
+    text: str,
+    block_type: str,
+    level: int | None,
+    parser: str,
+) -> dict[str, Any]:
+    """Construct a canonical normalized block dictionary."""
+    blk = {
         "block_id": block_id(document_id, index, text, block_type),
         "document_id": document_id,
         "type": block_type,
@@ -34,9 +52,12 @@ def normalized_block(document_id: str, index: int, text: str, block_type: str, l
             "source_index": index,
         },
     }
+    validate_block(blk)
+    return blk
 
 
-def parse_docx(path: Path, document_id: str, assets_dir: Path | None = None) -> list[dict]:
+def parse_docx(path: Path, document_id: str, assets_dir: Path | None = None) -> list[dict[str, Any]]:
+    """Parse a DOCX file into normalized document blocks and extract embedded images."""
     with zipfile.ZipFile(path) as archive:
         root = ElementTree.fromstring(archive.read("word/document.xml"))
         media = [name for name in archive.namelist() if name.startswith("word/media/") and not name.endswith("/")]
@@ -51,7 +72,8 @@ def parse_docx(path: Path, document_id: str, assets_dir: Path | None = None) -> 
                 if not destination.exists():
                     destination.write_bytes(data)
                 extracted_assets.append(f"assets/{destination_name}")
-    blocks = []
+
+    blocks: list[dict[str, Any]] = []
     for paragraph in root.iter():
         if not paragraph.tag.endswith("}p"):
             continue
@@ -65,25 +87,29 @@ def parse_docx(path: Path, document_id: str, assets_dir: Path | None = None) -> 
         level = int(match.group(1)) if match else None
         block_type = "title" if level else "paragraph"
         blocks.append(normalized_block(document_id, len(blocks), text, block_type, level, "docx"))
+
     for asset_path in extracted_assets:
         block = normalized_block(document_id, len(blocks), "Embedded DOCX image", "image", None, "docx")
         block["asset_path"] = asset_path
         blocks.append(block)
+
     return blocks
 
 
 class ContentHTMLParser(HTMLParser):
+    """HTML parser to extract content blocks and image elements."""
+
     BLOCK_TAGS = {"title", "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "blockquote", "figcaption"}
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.active = None
-        self.buffer = []
-        self.blocks = []
-        self.images = []
-        self.ignored_depth = 0
+        self.active: str | None = None
+        self.buffer: list[str] = []
+        self.blocks: list[tuple[str, str]] = []
+        self.images: list[tuple[str, str]] = []
+        self.ignored_depth: int = 0
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         if tag in {"script", "style", "nav"}:
             self.ignored_depth += 1
@@ -95,18 +121,18 @@ class ContentHTMLParser(HTMLParser):
             if values.get("src"):
                 self.images.append((values["src"], values.get("alt", "HTML image")))
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
         if tag in {"script", "style", "nav"} and self.ignored_depth:
             self.ignored_depth -= 1
         elif tag == self.active:
             self.flush()
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self.active and not self.ignored_depth:
             self.buffer.append(data)
 
-    def flush(self):
+    def flush(self) -> None:
         if self.active:
             text = re.sub(r"\s+", " ", " ".join(self.buffer)).strip()
             if text:
@@ -120,15 +146,18 @@ def parse_html(
     document_id: str,
     assets_dir: Path | None = None,
     resource_root: Path | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
+    """Parse an HTML file into normalized document blocks and extract local images."""
     parser = ContentHTMLParser()
     parser.feed(path.read_text(encoding="utf-8", errors="ignore"))
     parser.flush()
-    blocks = []
+
+    blocks: list[dict[str, Any]] = []
     for tag, text in parser.blocks:
         level = int(tag[1]) if re.fullmatch(r"h[1-6]", tag) else (1 if tag == "title" else None)
         block_type = "title" if level else "paragraph"
         blocks.append(normalized_block(document_id, len(blocks), text, block_type, level, "html"))
+
     if assets_dir:
         assets_dir.mkdir(parents=True, exist_ok=True)
         source_root = (resource_root or path.parent).resolve()
@@ -145,10 +174,12 @@ def parse_html(
             block = normalized_block(document_id, len(blocks), alt or "HTML image", "image", None, "html")
             block["asset_path"] = f"assets/{destination.name}"
             blocks.append(block)
+
     return blocks
 
 
-def markdown_from_blocks(blocks: list[dict]) -> str:
+def markdown_from_blocks(blocks: list[dict[str, Any]]) -> str:
+    """Generate Markdown representation from normalized blocks."""
     output = []
     for block in blocks:
         if block.get("asset_path"):
@@ -162,8 +193,10 @@ def markdown_from_blocks(blocks: list[dict]) -> str:
 
 
 def normalize_non_pdf(corpus: Path, force: bool = False) -> dict[str, int]:
+    """Normalize DOCX and HTML documents into canonical paper directories."""
     records = load_manifest(corpus)
     counts = {"done": 0, "skipped": 0, "failed": 0}
+
     for record in records:
         if not record.get("selected_for_extraction") or record.get("format") == "pdf":
             continue
@@ -198,14 +231,16 @@ def normalize_non_pdf(corpus: Path, force: bool = False) -> dict[str, int]:
                 "format": record["format"],
                 "version": "unknown",
                 "title": record["title"],
-                "authors": [],
-                "doi": None,
-                "arxiv_id": None,
+                "authors": record.get("authors", []),
+                "year": record.get("year"),
+                "doi": record.get("doi"),
+                "arxiv_id": record.get("arxiv_id"),
                 "source_path": record["canonical_path"],
                 "parser": {"name": record["format"], "version": "stdlib", "processed_at": now()},
                 "block_count": len(blocks),
                 "asset_count": sum(block.get("asset_path") is not None for block in blocks),
             }
+            validate_document(document)
             write_json(paper_dir / "document.json", document)
             quality = assess_document(paper_dir)
             (paper_dir / ".done").write_text("done\n", encoding="utf-8")
@@ -213,7 +248,10 @@ def normalize_non_pdf(corpus: Path, force: bool = False) -> dict[str, int]:
             update_stage(record, "normalization", "complete", quality_status=quality["status"])
             counts["done"] += 1
         except Exception as error:
+            logger.error("Failed to normalize non-pdf %s: %s", document_id, error)
             record_error(record, "normalization", error)
             counts["failed"] += 1
+
     save_manifest(corpus, records)
+    logger.info("Non-PDF normalization finished: %s", counts)
     return counts

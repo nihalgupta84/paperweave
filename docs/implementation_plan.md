@@ -23,8 +23,8 @@ respectively; neither is the canonical knowledge representation.
 
 The deterministic end-to-end MVP is implemented through Phase 5. It has been
 verified with synthetic MinerU v2 fixtures and a real MinerU 3.4.0 legacy corpus.
-Phase 6 metadata enrichment and the deferred integrations remain optional
-extensions, not requirements for the current corpus workflow.
+Phase 6 metadata enrichment, local hybrid retrieval, and explainable corpus
+graphs are implemented as optional or automatically generated extensions.
 
 ## Open-Source Hardening Status
 
@@ -78,6 +78,7 @@ corpus/
 │   ├── experiments.md
 │   ├── datasets.md
 │   ├── literature_review.md
+│   ├── references.md
 │   └── all_papers.md
 ├── manifests/
 │   └── documents.jsonl
@@ -92,8 +93,9 @@ readers may support them, but new writes use `pdfs/`, `raw/mineru/`, and
 
 1. A document is one exact PDF and is identified by `doc_<sha256-prefix>`.
 2. A work is a scholarly identity that may have multiple document versions.
-3. Documents with the same normalized title share a work ID; fuzzy title
-   matches are only review candidates, and automatic fuzzy merging is deferred.
+3. Documents with the same normalized title share a work ID. Fuzzy title
+   matches remain review candidates; automatic merging requires an exact DOI or
+   arXiv match and preserves both original work directories in quarantine.
 4. PDFs are never duplicated into taxonomy folders.
 5. Raw parser output is never modified by normalization.
 6. Every extracted claim or result must cite normalized evidence blocks.
@@ -173,14 +175,15 @@ collection Markdown by facet without copying PDFs.
 
 ## Phase 5 — Corpus Synthesis
 
-Status: all five reports implemented and generated in the real-corpus run.
+Status: all six reports implemented and generated in the tested pipeline.
 
-Generate five views from supported structured records:
+Generate six views from supported structured records:
 
 - `methodology.md`: cross-paper method organization and comparison.
 - `experiments.md`: protocols, baselines, metrics, results, and ablations.
 - `datasets.md`: dataset-centric usage and evaluation view.
 - `literature_review.md`: thematic evidence-backed synthesis and gaps.
+- `references.md`: extracted bibliography entries with source-block provenance.
 - `all_papers.md`: archival concatenation of normalized paper Markdown.
 
 `all_papers.md` is not the default context for agents because large corpora can
@@ -190,17 +193,41 @@ exceed model context windows.
 
 Create a stratified 10–20-paper gold corpus and measure metadata, taxonomy,
 dataset/result extraction, evidence validity, and unsupported-claim rates.
-Then add optional GROBID header extraction, followed separately by references
-and citation contexts. Metadata conflicts remain explicit and provenance-aware.
+Basic deterministic reference extraction and candidate citation linking are
+implemented. The optional GROBID client now submits PDFs to
+`processFulltextDocument`, preserves raw TEI, parses headers and references, and
+fills only missing metadata. Conflicts remain explicit and provenance-aware.
+
+## Phase 7 — Local Retrieval and Corpus Graphs
+
+Status: implemented and tested.
+
+- SQLite FTS5 exact-term retrieval with a fallback when FTS5 is unavailable.
+- Deterministic hashed TF-IDF sparse vectors and hybrid rank fusion.
+- Citation links with verified and candidate states.
+- Related-paper links based on taxonomy, datasets, method text, and
+  bibliographic coupling.
+- Heterogeneous paper–dataset–taxonomy graph in JSON and GraphML.
+
+These are corpus-local discovery tools. External citation expansion and neural
+embeddings remain replaceable future backends.
+
+## Phase 8 — Web Access and Connectors
+
+Status: planned. See `docs/web_roadmap.md`.
+
+The web application will consume the existing CLI/service layer rather than
+creating a second pipeline. Local folders remain the default. Google Drive is
+an explicit connector, and Cloudflare Tunnel is an optional route to a secured
+operator-hosted instance—not a substitute for authentication or multi-user
+isolation.
 
 ## Deferred Integrations
 
 Add these only after the structured corpus is accurate:
 
-- SQLite FTS5 and an optional local vector index;
 - OpenAlex enrichment;
 - Qdrant for larger hybrid retrieval workloads;
-- deterministic graph exports;
 - Neo4j or GraphRAG for graph-specific research questions;
 - VLM-based figure reconstruction.
 

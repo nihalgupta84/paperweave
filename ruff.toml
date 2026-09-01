@@ -1,0 +1,20 @@
+target-version = "py310"
+line-length = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "SIM108", # ternary operator suggestion
+]
+
+[lint.isort]
+known-first-party = ["corpus_converter"]

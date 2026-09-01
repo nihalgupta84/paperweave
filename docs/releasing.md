@@ -16,7 +16,7 @@ and [Trusted Publishing guide](https://packaging.python.org/en/latest/guides/pub
    - workflow: `publish.yml`
    - environment: `pypi`
 3. Confirm that the PyPI project `paperweave` is owned by this release and that
-   the `0.1.0` version has not already been uploaded.
+   the version in `pyproject.toml` has not already been uploaded.
 
 No `PYPI_API_TOKEN` GitHub secret is required for this workflow.
 
@@ -26,20 +26,19 @@ No `PYPI_API_TOKEN` GitHub secret is required for this workflow.
 2. Run the local checks:
 
    ```bash
-   python -m pip install -e ".[dev]"
+   uv pip install -e ".[dev]"
    python -m unittest discover -s tests -v
-   python -m build
-   python -m twine check dist/*
+   uv tool run --from build pyproject-build
+   uv tool run twine check dist/*
    ```
 
 3. Build and upload the artifacts with a credential stored outside the
    repository. Do not put the token in a shell script, commit, or log:
 
    ```bash
-   python -m pip install --upgrade build twine
-   python -m build
-   python -m twine check dist/*
-   python -m twine upload dist/*
+   uv tool run --from build pyproject-build
+   uv tool run twine check dist/*
+   uv tool run twine upload dist/*
    ```
 
    Twine reads `TWINE_USERNAME` and `TWINE_PASSWORD`; use a secret manager or
@@ -48,15 +47,15 @@ No `PYPI_API_TOKEN` GitHub secret is required for this workflow.
 4. Commit the version change and create an annotated tag:
 
    ```bash
-   git tag -a v0.1.0 -m "Release PaperWeave 0.1.0"
+   git tag -a vX.Y.Z -m "Release PaperWeave X.Y.Z"
    git push origin main --follow-tags
    ```
 
 5. Verify the public installation in a fresh environment:
 
    ```bash
-   python -m venv /tmp/paperweave-check
-   /tmp/paperweave-check/bin/python -m pip install "paperweave[full]"
+   uv venv --python 3.11 /tmp/paperweave-check
+   uv pip install --python /tmp/paperweave-check/bin/python "paperweave[full]"
    /tmp/paperweave-check/bin/paperweave --help
    ```
 

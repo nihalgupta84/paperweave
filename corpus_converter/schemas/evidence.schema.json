@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "locator": {
+      "type": "object",
+      "required": ["document_id", "block_id", "page_index", "section"],
+      "properties": {
+        "document_id": {"type": "string", "pattern": "^doc_[0-9a-f]{16}$"},
+        "block_id": {"type": "string", "pattern": "^blk_[0-9a-f]{20}$"},
+        "page_index": {"type": ["integer", "null"], "minimum": 0},
+        "section": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "statement": {
+      "type": "object",
+      "required": ["statement", "support_status", "evidence"],
+      "properties": {
+        "statement": {"type": "string"},
+        "support_status": {"enum": ["supported", "evidence_cited_unverified", "partially_supported", "ambiguous", "unsupported", "not_reported"]},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/locator"}}
+      },
+      "additionalProperties": false
+    }
+  }
+}
