@@ -164,8 +164,8 @@ def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[st
     """Discover named datasets from evidence text as well as a configured vocabulary."""
     relevant = relevant_entity_blocks(blocks)
     found = {item["name"].casefold(): item for item in find_mentions(relevant, configured)}
-    single = re.compile(r"\b((?:[A-Z][A-Za-z0-9+_.-]*)(?:\s+(?:[A-Z][A-Za-z0-9+_.-]*|of|the)){0,5})\s+datasets?\b")
-    coordinated = re.compile(r"\b([A-Z][A-Za-z0-9+_.-]*(?:\s*(?:,|and)\s*[A-Z][A-Za-z0-9+_.-]*)+)\s+datasets?\b")
+    single = re.compile(r"\b((?:[A-Z][A-Za-z0-9+_.-]*)(?:\s+(?:[A-Z][A-Za-z0-9+_.-]*|of|the)){0,5})\s+(?i:datasets?)\b")
+    coordinated = re.compile(r"\b([A-Z][A-Za-z0-9+_.-]*(?:\s*(?:,|and)\s*[A-Z][A-Za-z0-9+_.-]*)+)\s+(?i:datasets?)\b")
     named = re.compile(r"\bdatasets?\s*(?:is|was|are|were)?\s*(?:called|named)\s+([A-Z][A-Za-z0-9+_.-]*)", re.I)
     examples = re.compile(
         r"\bdatasets?\s+(?:such as|including|like)\s+([A-Z][A-Za-z0-9+_.-]*(?:\s*(?:,|and)\s*[A-Z][A-Za-z0-9+_.-]*)*)",

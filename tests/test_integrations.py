@@ -170,6 +170,23 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(datasets, {"CARE", "TeddyCup", "TotalSegmentator"})
         self.assertEqual(metrics, {"Dice"})
 
+    def test_discovers_dataset_with_title_case_suffix(self) -> None:
+        blocks = [
+            {
+                "document_id": "doc_" + "a" * 16,
+                "block_id": "blk_" + "b" * 20,
+                "page_index": 2,
+                "section_path": ["Experiments"],
+                "section_role": "experiments",
+                "type": "text",
+                "text": "Experiments use the CARE Dataset and report a Dice score.",
+            }
+        ]
+
+        datasets = {item["name"] for item in discover_dataset_mentions(blocks, ())}
+
+        self.assertEqual(datasets, {"CARE"})
+
     def test_package_native_run_completes_html_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
