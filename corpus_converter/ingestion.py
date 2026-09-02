@@ -346,7 +346,18 @@ def pdf_preflight(path: Path) -> dict[str, Any]:
 
 def discover(input_path: Path) -> tuple[list[Path], list[Path]]:
     """Discover supported and unsupported files in input path."""
-    files = [input_path] if input_path.is_file() else sorted(path for path in input_path.rglob("*") if path.is_file())
+    if input_path.is_file():
+        files = [input_path]
+    else:
+        generated_corpora = {
+            marker.parent.parent.resolve() for marker in input_path.rglob("manifests/last_pipeline.json")
+        }
+        files = sorted(
+            path
+            for path in input_path.rglob("*")
+            if path.is_file()
+            and not any(root == path.resolve() or root in path.resolve().parents for root in generated_corpora)
+        )
     supported, skipped = [], []
     for path in files:
         (supported if path.suffix.lower() in SUPPORTED_EXTENSIONS else skipped).append(path)

@@ -3,6 +3,8 @@
 import argparse
 import hashlib
 import json
+import logging
+import re
 import shutil
 from collections.abc import Iterable
 from datetime import datetime, timezone
@@ -18,6 +20,7 @@ from .quality import assess_document
 from .validation import validate_block, validate_document
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+logger = logging.getLogger(__name__)
 
 
 def utc_now() -> str:
@@ -181,13 +184,32 @@ def resolve_asset(auto_dir: Path, relative_path: str) -> Path | None:
     return None
 
 
-def copy_assets(auto_dir: Path, paper_dir: Path, blocks: list[dict[str, Any]]) -> dict[str, str]:
+def copy_assets(
+    auto_dir: Path,
+    paper_dir: Path,
+    blocks: list[dict[str, Any]],
+    asset_policy: str = "figures",
+) -> dict[str, str]:
+    """Copy useful visual assets without duplicating every parser rendering."""
     assets_dir = paper_dir / "assets"
-    assets_dir.mkdir(parents=True, exist_ok=True)
-    requested = [block["asset_path"] for block in blocks if block.get("asset_path")]
+    if asset_policy == "none":
+        for block in blocks:
+            block["asset_path"] = None
+        return {}
+    requested = [
+        block["asset_path"]
+        for block in blocks
+        if block.get("asset_path")
+        and (
+            asset_policy == "all"
+            or (block.get("type") in {"image", "table", "chart"} and block.get("text", "").strip())
+        )
+    ]
     images_dir = auto_dir / "images"
-    if images_dir.is_dir():
+    if asset_policy == "all" and images_dir.is_dir():
         requested.extend(str(path.relative_to(auto_dir)) for path in images_dir.iterdir() if path.is_file())
+    if requested:
+        assets_dir.mkdir(parents=True, exist_ok=True)
     mapping = {}
     for relative_path in dict.fromkeys(requested):
         source = resolve_asset(auto_dir, relative_path)
@@ -203,12 +225,18 @@ def copy_assets(auto_dir: Path, paper_dir: Path, blocks: list[dict[str, Any]]) -
     for block in blocks:
         if block.get("asset_path") in mapping:
             block["asset_path"] = mapping[block["asset_path"]]
+        elif block.get("asset_path"):
+            block["asset_path"] = None
     return mapping
 
 
 def rewrite_markdown_assets(text: str, mapping: dict[str, str]) -> str:
     for old, new in sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True):
         text = text.replace(old, new)
+    # MinerU may emit raster fallbacks for equations and other parser details.
+    # Once raw output is compacted, unresolved links would be broken and add no
+    # information because their text/equation representation is already kept.
+    text = re.sub(r"!\[[^]]*\]\((?:\./)?images/[^)]+\)\s*", "", text)
     return text
 
 
@@ -248,14 +276,14 @@ def identify_document(paper_root, origin_pdf, by_stem, by_hash):
     }
 
 
-def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
+def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force, asset_policy="figures"):
     auto_dir = find_auto_dir(paper_root)
     if not auto_dir:
-        print(f"NO_AUTO: {paper_root}")
+        logger.warning("No MinerU auto directory: %s", paper_root)
         return "failed", None
     main_md = find_largest(auto_dir, ["*.md"])
     if not main_md:
-        print(f"NO_MD: {paper_root}")
+        logger.warning("No MinerU Markdown output: %s", paper_root)
         return "failed", None
     v1_files = [path for path in auto_dir.glob("*content_list*.json") if "content_list_v2" not in path.name]
     content_json = max(v1_files, key=lambda path: path.stat().st_size) if v1_files else None
@@ -266,18 +294,20 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
     paper_dir = papers_dir / document_id
     done_file = paper_dir / ".done"
     if done_file.exists() and not force:
-        print(f"SKIP: {document_id} | {paper_root.name}")
+        logger.debug("Skipping normalized document %s (%s)", document_id, paper_root.name)
         return "skipped", document_id
 
     paper_dir.mkdir(parents=True, exist_ok=True)
+    if force and (paper_dir / "assets").is_dir():
+        shutil.rmtree(paper_dir / "assets")
     blocks = normalize_blocks(content_json, document_id, parser_version)
     if not blocks:
         update_stage(record, "normalization", "failed", error="No MinerU content blocks found")
-        print(f"NO_BLOCKS: {paper_root}")
+        logger.warning("No content blocks found: %s", paper_root)
         return "failed", document_id
     for block in blocks:
         validate_block(block)
-    asset_map = copy_assets(auto_dir, paper_dir, blocks)
+    asset_map = copy_assets(auto_dir, paper_dir, blocks, asset_policy)
     markdown = rewrite_markdown_assets(main_md.read_text(encoding="utf-8", errors="ignore"), asset_map)
     (paper_dir / "paper.md").write_text(markdown, encoding="utf-8")
     write_jsonl(paper_dir / "blocks.jsonl", blocks)
@@ -312,7 +342,7 @@ def format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force):
     done_file.write_text("done\n", encoding="utf-8")
     update_stage(record, "extraction", "complete", parser="mineru")
     update_stage(record, "normalization", "complete", quality_status=quality["status"])
-    print(f"DONE: {document_id} | blocks={len(blocks)} assets={document['asset_count']}")
+    logger.info("Normalized %s (%d blocks, %d assets)", document_id, len(blocks), document["asset_count"])
     return "done", document_id
 
 
@@ -322,6 +352,7 @@ def format_mineru_output(
     out_dir: Path | None = None,
     parser_version: str | None = None,
     force: bool = False,
+    asset_policy: str = "figures",
 ) -> dict[str, int]:
     """Normalize MinerU output into canonical PaperWeave document folders."""
     if corpus_dir:
@@ -351,10 +382,9 @@ def format_mineru_output(
     paper_roots = sorted(path for path in raw_dir.iterdir() if path.is_dir())
     counts = {"done": 0, "skipped": 0, "failed": 0}
     statuses = {}
-    print(f"Found MinerU paper folders: {len(paper_roots)}")
     for index, paper_root in enumerate(paper_roots, 1):
-        print(f"[{index}/{len(paper_roots)}] {paper_root.name}")
-        status, document_id = format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force)
+        logger.debug("Normalizing MinerU document %d/%d: %s", index, len(paper_roots), paper_root.name)
+        status, document_id = format_one(paper_root, papers_dir, by_stem, by_hash, parser_version, force, asset_policy)
         counts[status] += 1
         if document_id:
             statuses[document_id] = "complete" if status in {"done", "skipped"} else "failed"
@@ -390,9 +420,6 @@ def format_mineru_output(
         )
     if records_by_id:
         write_jsonl(canonical_manifest_path, sorted(records_by_id.values(), key=lambda item: item["document_id"]))
-    print("\nSummary")
-    print(json.dumps(counts, indent=2))
-    print(f"Output: {papers_dir}")
     return counts
 
 
@@ -404,6 +431,7 @@ def main() -> None:
     parser.add_argument("--out-dir", type=Path, help="Legacy explicit normalized output path.")
     parser.add_argument("--parser-version")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--assets", choices=["figures", "all", "none"], default="figures")
     args = parser.parse_args()
     format_mineru_output(
         corpus_dir=args.corpus_dir,
@@ -411,6 +439,7 @@ def main() -> None:
         out_dir=args.out_dir,
         parser_version=args.parser_version,
         force=args.force,
+        asset_policy=args.assets,
     )
 
 

@@ -16,6 +16,29 @@ from .validation import validate_analysis, validate_experiments, validate_work
 logger = logging.getLogger(__name__)
 
 DEFAULT_ENTITIES_FILE = Path(__file__).resolve().parent / "taxonomies" / "entities.json"
+ENTITY_ROLES = {"abstract", "methodology", "experiments", "datasets", "results", "discussion", "conclusion"}
+DATASET_STOPWORDS = {
+    "a",
+    "an",
+    "benchmark",
+    "clinical",
+    "data",
+    "different",
+    "external",
+    "for",
+    "internal",
+    "new",
+    "our",
+    "private",
+    "public",
+    "segmentation",
+    "source",
+    "test",
+    "testing",
+    "the",
+    "training",
+    "validation",
+}
 
 
 def load_entities(custom_path: str | Path | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -94,14 +117,77 @@ def select(blocks: list[dict[str, Any]], roles: set[str], limit: int) -> list[di
     return selected[:limit]
 
 
+def term_present(text: str, term: str) -> bool:
+    """Match an entity as a complete token sequence instead of a substring."""
+    return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", text, re.I))
+
+
+def relevant_entity_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return body blocks likely to contain experimental entities."""
+    return [
+        block
+        for block in blocks
+        if block.get("section_role") in ENTITY_ROLES
+        and block.get("type") not in {"header", "footer", "page_number", "page_footnote"}
+        and block.get("text", "").strip()
+    ]
+
+
 def find_mentions(blocks: list[dict[str, Any]], terms: tuple[str, ...]) -> list[dict[str, Any]]:
     """Find entity mentions with source block citations."""
     found = {}
     for block in blocks:
-        lowered = block.get("text", "").lower()
+        text = block.get("text", "")
         for term in terms:
-            if term.lower() in lowered and term.lower() not in found:
-                found[term.lower()] = {"name": term, "evidence": [evidence(block)]}
+            if term.casefold() not in found and term_present(text, term):
+                found[term.casefold()] = {"name": term, "evidence": [evidence(block)]}
+    return list(found.values())
+
+
+def _clean_dataset_candidate(value: str) -> str | None:
+    value = re.sub(r"\[[^]]+\]|\([^)]*\d[^)]*\)", " ", value)
+    value = re.sub(r"\s+", " ", value).strip(" ,.;:–—-")
+    words = value.split()
+    while words and words[0].casefold() in DATASET_STOPWORDS:
+        words.pop(0)
+    while words and words[-1].casefold() in DATASET_STOPWORDS:
+        words.pop()
+    value = " ".join(words)
+    if not value or len(value) > 80 or len(words) > 6:
+        return None
+    if value.casefold() in DATASET_STOPWORDS or not re.search(r"[A-Z0-9]", value):
+        return None
+    return value
+
+
+def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Discover named datasets from evidence text as well as a configured vocabulary."""
+    relevant = relevant_entity_blocks(blocks)
+    found = {item["name"].casefold(): item for item in find_mentions(relevant, configured)}
+    single = re.compile(r"\b((?:[A-Z][A-Za-z0-9+_.-]*)(?:\s+(?:[A-Z][A-Za-z0-9+_.-]*|of|the)){0,5})\s+datasets?\b")
+    coordinated = re.compile(r"\b([A-Z][A-Za-z0-9+_.-]*(?:\s*(?:,|and)\s*[A-Z][A-Za-z0-9+_.-]*)+)\s+datasets?\b")
+    named = re.compile(r"\bdatasets?\s*(?:is|was|are|were)?\s*(?:called|named)\s+([A-Z][A-Za-z0-9+_.-]*)", re.I)
+    examples = re.compile(
+        r"\bdatasets?\s+(?:such as|including|like)\s+([A-Z][A-Za-z0-9+_.-]*(?:\s*(?:,|and)\s*[A-Z][A-Za-z0-9+_.-]*)*)",
+        re.I,
+    )
+
+    for block in relevant:
+        text = re.sub(r"<sup\b[^>]*>.*?</sup>", "", block.get("text", ""), flags=re.I | re.S)
+        text = re.sub(r"<[^>]+>", "", text)
+        candidates = [match.group(1) for match in single.finditer(text)]
+        candidates.extend(match.group(1) for match in named.finditer(text))
+        for match in examples.finditer(text):
+            candidates.extend(re.split(r"\s*(?:,|\band\b)\s*", match.group(1)))
+        for match in coordinated.finditer(text):
+            candidates.extend(re.split(r"\s*(?:,|\band\b)\s*", match.group(1)))
+        for candidate in candidates:
+            cleaned = _clean_dataset_candidate(candidate)
+            if cleaned and cleaned.casefold() not in found:
+                found[cleaned.casefold()] = {
+                    "name": cleaned,
+                    "evidence": [evidence(block)],
+                }
     return list(found.values())
 
 
@@ -145,8 +231,9 @@ def analyze_document(
         method_blocks = select(blocks, {"abstract"}, 2)
     experiment_blocks = select(blocks, {"experiments", "datasets"}, 6)
     limitation_blocks = select(blocks, {"limitations", "discussion", "conclusion"}, 3)
-    found_datasets = find_mentions(blocks, datasets)
-    found_metrics = find_mentions(blocks, metrics)
+    entity_blocks = relevant_entity_blocks(blocks)
+    found_datasets = discover_dataset_mentions(blocks, datasets)
+    found_metrics = find_mentions(entity_blocks, metrics)
 
     # Extract bibliographic references
     extract_and_save_references(paper_dir, record_dir, document["document_id"])
@@ -413,6 +500,7 @@ def enrich_corpus(corpus: Path, resolution: Any, force: bool = False) -> dict[st
         return {
             "requested": resolution.requested,
             "effective": "deterministic",
+            "model": resolution.model,
             "enriched": 0,
             "fallback_reason": resolution.fallback_reason,
         }
@@ -427,13 +515,19 @@ def enrich_corpus(corpus: Path, resolution: Any, force: bool = False) -> dict[st
         if not document:
             continue
         record = records_by_id.get(document["document_id"])
-        if record and record.get("stages", {}).get("analysis", {}).get("mode") == resolution.effective and not force:
+        stage = record.get("stages", {}).get("analysis", {}) if record else {}
+        if (
+            record
+            and stage.get("mode") == resolution.effective
+            and stage.get("model") == resolution.model
+            and not force
+        ):
             continue
         ok, error = enrich_document(paper_dir, corpus, resolution.provider)
         if ok:
             enriched += 1
             if record:
-                update_stage(record, "analysis", "complete", mode=resolution.effective)
+                update_stage(record, "analysis", "complete", mode=resolution.effective, model=resolution.model)
         else:
             failed += 1
             errors.append({"document_id": document["document_id"], "error": error})
@@ -445,6 +539,7 @@ def enrich_corpus(corpus: Path, resolution: Any, force: bool = False) -> dict[st
     return {
         "requested": resolution.requested,
         "effective": resolution.effective if enriched else "deterministic",
+        "model": resolution.model,
         "enriched": enriched,
         "failed_with_deterministic_fallback": failed,
         "errors": errors,

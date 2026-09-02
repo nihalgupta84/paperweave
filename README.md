@@ -1,73 +1,208 @@
 # 📚 PaperWeave
 
-> Turn a folder of research papers into a deduplicated, searchable corpus with evidence-linked literature-review reports.
+> Turn research papers into a clean, searchable, evidence-linked literature corpus.
 
 [![CI](https://github.com/nihalgupta84/paperweave/actions/workflows/ci.yml/badge.svg)](https://github.com/nihalgupta84/paperweave/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/paperweave?color=3776AB&label=PyPI)](https://pypi.org/project/paperweave/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-PaperWeave accepts one paper or a folder containing PDF, DOCX, HTML, and HTM
-documents. It removes exact duplicates before extraction, groups different file
-versions of the same work, normalizes their content, and generates corpus-level
-Markdown reports about methods, experiments, datasets, references, and the full
-paper collection.
+PaperWeave takes one paper or a folder of papers and produces:
 
-The default analysis is deterministic and runs without an LLM or API key.
+- deduplicated and normalized documents;
+- corpus reports about methods, experiments, datasets, and references;
+- exact and semantic-style local search;
+- evidence links back to document blocks and pages;
+- citation, related-paper, and paper–dataset knowledge graphs.
 
-## 🚀 Install and run from PyPI
+PDF, DOCX, HTML, and HTM inputs are supported. An LLM is optional.
 
-This is the normal installation path. You do not need to clone the repository.
+## Quick start
 
-### For PDF, DOCX, and HTML
-
-PDF extraction requires MinerU, which is included in the `full` installation:
+Install PDF support:
 
 ```bash
-python -m pip install --upgrade "paperweave[full]"
+python -m pip install "paperweave[full]"
 ```
 
-Then, from your research project:
+Run it from your project directory:
 
 ```bash
-paperweave run \
-  --input paper_v2 \
-  --corpus corpus \
-  --device auto
+paperweave run papers
 ```
 
-For your underwater project, run that command from:
+That is the complete workflow. Results are written to `corpus/`.
+
+If your documents already live in `corpus/raw_pdfs` or `corpus/pdfs`, use:
+
+```bash
+paperweave run corpus/raw_pdfs
+```
+
+PaperWeave recognizes these source-folder names and uses their parent as the
+corpus directory. You can always choose an explicit destination:
+
+```bash
+paperweave run /path/to/papers --corpus /path/to/corpus
+```
+
+For DOCX/HTML without PDF extraction, the smaller installation is enough:
+
+```bash
+python -m pip install paperweave
+```
+
+## What the command does
 
 ```text
-~/nihal/underwater/uw_edge
+discover → deduplicate → extract → identify sections → analyze
+         → organize → synthesize → index → build graphs
 ```
 
-It reads papers recursively from `paper_v2` and creates `uw_edge/corpus`.
+Re-running the command processes new or incomplete papers and reuses completed
+work.
 
-### For DOCX and HTML only
+The normal terminal output is a short completion summary. MinerU’s detailed
+output is saved to a log instead of flooding the terminal. Use `--verbose` to
+watch parser output or `--json` for a machine-readable result.
 
-The smaller base package does not install MinerU:
+## Outputs you will normally use
+
+```text
+corpus/
+├── pdfs/                         organized source PDFs
+├── papers/<document_id>/         normalized paper Markdown
+├── synthesis/
+│   ├── methodology.md            methods across papers
+│   ├── experiments.md            setups, metrics, and results
+│   ├── datasets.md               datasets and papers using them
+│   ├── literature_review.md      faceted corpus overview
+│   ├── references.md             extracted bibliographies
+│   ├── citation_graph.md         readable graph explanation
+│   └── all_papers.md             combined normalized text
+├── collections/                  generated topic/method/dataset views
+└── indexes/search.sqlite3        local search index
+```
+
+The `records/` and `manifests/` directories are machine-readable internal data
+that make reports reproducible. Most users do not need to open them.
+
+By default, PaperWeave produces a compact text corpus: it keeps source PDFs,
+Markdown, tables as text, evidence records, and reports, while removing parser
+intermediates and extracted image files. Retain selected or all visuals when
+needed:
 
 ```bash
-python -m pip install --upgrade paperweave
-paperweave run --input /path/to/documents --corpus corpus
+paperweave run papers --assets figures
+paperweave run papers --assets all --keep-parser-output
 ```
 
-### Confirm the installation
+Compact parser files retained by an older release:
 
 ```bash
-paperweave --version
-paperweave run --help
+paperweave compact --corpus corpus
 ```
 
-Installing PaperWeave does not create a `scripts/` folder in your project. The
-installed interface is the `paperweave` command. A command such as
-`bash scripts/05_run_all.sh` is available only inside a cloned PaperWeave source
-repository.
+See [Understanding the output](docs/outputs.md) for the complete layout.
 
-## 🧑‍💻 Install from a cloned repository
+## Automatic local LLM selection
 
-Use this path when developing PaperWeave or changing its source code:
+The default `--semantic-provider auto` follows this order:
+
+1. If Ollama is running and `llm-checker` is installed, ask `llm-checker` to
+   rank the models already installed on this hardware.
+2. Use its highest-ranked available model for evidence-constrained enrichment.
+3. If no suitable local model is available, complete the run with deterministic
+   extraction.
+
+PaperWeave never downloads a large model silently. To enable automatic model
+selection:
+
+```bash
+npm install -g llm-checker
+ollama serve
+paperweave run papers
+```
+
+To select a model yourself:
+
+```bash
+paperweave run papers --semantic-provider ollama --model qwen2.5:7b
+```
+
+To prohibit LLM use:
+
+```bash
+paperweave run papers --semantic-provider deterministic
+```
+
+`llm-checker` is optional and remains governed by its own license. PaperWeave
+uses only its installed-model ranking; it does not automatically pull or remove
+models.
+
+## Search
+
+```bash
+paperweave search --corpus corpus "rectal cancer segmentation datasets"
+```
+
+Search combines exact-term retrieval with a lightweight local vector-like
+ranking. It works without an external database or model.
+
+## Understanding the graphs
+
+PaperWeave creates two related graph views:
+
+- **paper graph** — papers connected by extracted citations or explainable
+  similarity;
+- **knowledge graph** — papers connected to datasets and taxonomy labels.
+
+Citation links are marked as identifier-verified or fuzzy-title candidates.
+Related-paper links are computed only from the papers in your corpus. PaperWeave
+does not search the global literature like Connected Papers or Litmaps.
+
+Read [Understanding graphs](docs/graphs.md) for edge meanings, confidence, and
+GraphML visualization instructions.
+
+## Mixed folders and duplicates
+
+| Input situation | Behavior |
+| --- | --- |
+| One supported file | Process that file |
+| Nested directory | Find supported papers recursively |
+| Exact duplicate | Process once and record the duplicate |
+| PDF, DOCX, and HTML of the same paper | Group as one work; prefer PDF |
+| Distinct manuscript versions | Keep separate documents under one work when identity is supported |
+| Images, CSV, source code, logs, or archives | Ignore them as paper inputs |
+| Unreadable or protected PDF | Isolate the failure and continue |
+
+Use `--format-policy all` when every distinct representation should be parsed.
+
+## Google Drive
+
+After configuring an rclone Google Drive remote:
+
+```bash
+paperweave run "https://drive.google.com/drive/folders/FOLDER_ID" --remote mydrive
+```
+
+## Useful options
+
+```text
+--corpus PATH                    choose the corpus directory
+--device auto|gpu|cpu            MinerU compute device
+--assets figures|all|none        normalized visual assets to retain
+--keep-parser-output             keep MinerU intermediate/debug output
+--semantic-provider auto|deterministic|ollama|openai-compatible
+--model NAME                     explicitly select a model
+--verbose                        show detailed processing output
+--json                           print the full machine-readable run result
+--force-analysis                 rebuild extracted facts and reports
+```
+
+Run `paperweave run --help` for the complete reference.
+
+## Install for development
 
 ```bash
 git clone https://github.com/nihalgupta84/paperweave.git
@@ -75,244 +210,40 @@ cd paperweave
 uv venv --python 3.11 .venv
 source .venv/bin/activate
 uv pip install -e ".[full,dev]"
+pre-commit run --all-files
+python -m unittest discover -s tests -v
 ```
 
-The recommended command remains the same:
+## Why PaperWeave?
 
-```bash
-paperweave run --input /path/to/papers --corpus /path/to/project/corpus
-```
+Reference managers store papers. Document parsers convert files. Chat-with-PDF
+tools answer questions. PaperWeave builds a reusable local research corpus that
+connects these stages while retaining evidence provenance.
 
-Repository shell scripts remain available for development and compatibility,
-but they are not required by the installed package.
+It is designed for inspectable literature work, not as a replacement for a
+formal PRISMA review manager or a global scholarly search engine.
 
-## 📥 Supported input
+## Acknowledgements
 
-| Input | Behavior |
-| --- | --- |
-| One PDF, DOCX, HTML, or HTM file | Processes that document |
-| A directory | Searches recursively for supported documents |
-| PDF + DOCX + HTML of one work | Keeps every representation; selects PDF by default |
-| Exact duplicate files | Processes one copy and records/quarantines the duplicate |
-| Different versions of a paper | Keeps separate documents under one scholarly work |
-| CSV, PNG, JPEG, ZIP, LaTeX, and other files | Skips them and records the reason |
-| Password-protected or unreadable PDF | Isolates the failure and continues the batch |
+PaperWeave uses or interoperates with [MinerU](https://github.com/opendatalab/MinerU),
+[GROBID](https://github.com/kermitt2/grobid),
+[rclone](https://github.com/rclone/rclone),
+[Ollama](https://github.com/ollama/ollama),
+[vLLM](https://github.com/vllm-project/vllm), and optionally
+[LLM Checker](https://github.com/signerless/llm-checker).
 
-Use `--format-policy all` to extract every distinct PDF/DOCX/HTML
-representation instead of selecting `PDF > DOCX > HTML`.
+Upstream projects retain their own licenses and citation requirements. Do not
+redistribute papers or extracted media unless their licenses permit it.
 
-PaperWeave does not treat image, CSV, or LaTeX files inside a project directory
-as research papers. In a directory such as `paper_v2`, it will find `main.pdf`
-and skip figures, tables, logs, YAML files, and source code.
+## Documentation
 
-## 📤 Generated corpus
-
-```text
-corpus/
-├── pdfs/                    selected canonical PDFs
-├── sources/                 selected DOCX/HTML files
-├── raw/mineru/              untouched MinerU output
-├── raw/grobid/              optional GROBID output
-├── papers/<document_id>/    clean Markdown, blocks, and local assets
-├── records/<work_id>/       structured facts and evidence
-├── indexes/                 local search index
-├── collections/             generated method/dataset/topic views
-├── synthesis/               literature-review reports and graph summaries
-├── manifests/               identities, stages, and run state
-└── quarantine/              recoverable duplicates and failed inputs
-```
-
-The main reports are:
-
-```text
-corpus/synthesis/
-├── methodology.md
-├── experiments.md
-├── datasets.md
-├── literature_review.md
-├── references.md
-└── all_papers.md
-```
-
-Run the same command after adding papers. Existing successful documents are
-preserved, and already completed extraction stages are skipped unless `--force`
-is supplied.
-
-## 🧠 GPU and LLM requirements
-
-An LLM is not required. The default semantic provider is `deterministic` and
-produces evidence-linked extractive records and reports.
-
-| Situation | Result |
-| --- | --- |
-| No local LLM | The complete deterministic analysis still runs |
-| No GPU | MinerU can use CPU, but PDF extraction will be slower |
-| DOCX/HTML-only corpus | No MinerU or GPU is needed |
-| Ollama/OpenAI-compatible model available | Optional schema-constrained enrichment can be enabled |
-
-Force CPU parsing with:
-
-```bash
-paperweave run --input papers --corpus corpus --device cpu
-```
-
-Optional local-model enrichment:
-
-```bash
-paperweave run \
-  --input papers \
-  --corpus corpus \
-  --semantic-provider ollama \
-  --model qwen2.5:7b
-```
-
-If the optional provider is unavailable, PaperWeave records the reason and uses
-deterministic extraction. Add `--strict-provider` only when fallback should be
-an error.
-
-## ☁️ Google Drive input
-
-Configure an rclone Google Drive remote, then pass a folder URL or ID:
-
-```bash
-paperweave run \
-  --input "https://drive.google.com/drive/folders/<folder-id>" \
-  --corpus corpus \
-  --remote mydrive
-```
-
-If exactly one rclone remote is configured, `--remote` can be omitted. Drive
-support requires the external `rclone` command; it does not require cloning the
-PaperWeave repository.
-
-## 🔎 Search and paper graphs
-
-The complete run builds a local SQLite search index and corpus knowledge graph.
-
-```bash
-paperweave search --corpus corpus "underwater enhancement UIEB"
-paperweave graph --corpus corpus
-```
-
-With multiple papers, graph outputs distinguish:
-
-- identifier-verified citations;
-- fuzzy-title citation candidates;
-- explainable related-paper links based on methods, datasets, taxonomy, and
-  shared references;
-- paper-to-dataset and paper-to-taxonomy knowledge edges.
-
-These are corpus-local discovery tools. PaperWeave does not query the global
-literature graph provided by services such as Connected Papers or Litmaps.
-
-## 🧰 Command reference
-
-| Command | Purpose |
-| --- | --- |
-| `paperweave run` | Complete documents-to-reports workflow |
-| `paperweave review` | Inspect quality warnings and possible duplicates |
-| `paperweave search` | Search normalized paper blocks |
-| `paperweave graph` | Rebuild paper and knowledge graphs |
-| `paperweave export` | Export BibTeX, CSV, or JSON-LD |
-| `paperweave grobid` | Run optional GROBID metadata enrichment |
-| `paperweave capabilities` | Show detected compute/model capabilities |
-
-Every stage is also available separately through `paperweave --help` for users
-who need manual control.
-
-## ❓ Troubleshooting
-
-### `scripts/05_run_all.sh: No such file or directory`
-
-You installed PaperWeave from PyPI. Use the installed command:
-
-```bash
-paperweave run --input paper_v2 --corpus corpus
-```
-
-### `PDF extraction requires MinerU`
-
-The base package was installed, but the input contains a selected PDF. Install
-the complete PDF dependencies in the same Python environment:
-
-```bash
-python -m pip install --upgrade "paperweave[full]"
-```
-
-### `paperweave: command not found`
-
-Confirm that installation and execution use the same interpreter:
-
-```bash
-python -m pip show paperweave
-python -m site --user-base
-```
-
-For a `--user` installation, the executable is commonly under
-`~/.local/bin`. Add that directory to `PATH`, or install inside an activated
-virtual/Conda environment without `--user`.
-
-### Existing Conda environment
-
-Inside an activated environment, prefer:
-
-```bash
-python -m pip install --upgrade "paperweave[full]"
-```
-
-Using `--user` inside an environment can place the package and executable in a
-different user-level location than expected.
-
-## 🔬 Why PaperWeave is different
-
-Reference managers organize citations. PDF parsers convert files. Chat-with-PDF
-tools answer questions. PaperWeave connects these stages into a reusable local
-corpus:
-
-- identity and duplicate handling happen before expensive extraction;
-- one paper can belong to multiple method, condition, dataset, and goal facets;
-- extracted statements retain document, block, section, page, and coordinate
-  provenance when available;
-- deterministic output remains usable without a model server;
-- reports, collections, search indexes, and graphs can be rebuilt from canonical
-  records.
-
-PaperWeave supports exploratory and narrative literature review workflows. It
-is not currently a complete PRISMA protocol-management or global scholarly
-discovery platform.
-
-## ⚖️ Scientific and copyright boundaries
-
-Evidence provenance makes a statement inspectable; it does not prove that the
-paper's claim is scientifically correct. Model-enriched statements are marked
-as evidence-cited but semantically unverified unless separately reviewed.
-
-Do not redistribute downloaded papers, extracted figures, or full Markdown
-unless their licenses allow it. Project corpora are ignored by the repository's
-default Git rules.
-
-## 🙏 Acknowledgements
-
-PaperWeave uses or interoperates with:
-
-- [MinerU](https://github.com/opendatalab/MinerU) for layout-aware PDF parsing;
-- [GROBID](https://github.com/kermitt2/grobid) for optional scholarly metadata
-  and bibliography extraction;
-- [rclone](https://github.com/rclone/rclone) for optional Google Drive transfer;
-- [Ollama](https://github.com/ollama/ollama) and
-  [vLLM](https://github.com/vllm-project/vllm) for optional model inference.
-
-See [CITATION.cff](CITATION.cff) for citing PaperWeave. Upstream tools retain
-their own licenses and citation requirements.
-
-## 📖 Project documentation
-
+- [Getting started](docs/getting_started.md)
+- [Understanding the output](docs/outputs.md)
+- [Understanding graphs](docs/graphs.md)
 - [Implementation plan](docs/implementation_plan.md)
 - [Current walkthrough](docs/walkthrough.md)
-- [Web interface roadmap](docs/web_roadmap.md)
+- [Web roadmap](docs/web_roadmap.md)
 - [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Release process](docs/releasing.md)
+- [Security](SECURITY.md)
 
-PaperWeave is released under the [MIT License](LICENSE). The license applies to
-PaperWeave code, not to the papers users process.
+PaperWeave is released under the [MIT License](LICENSE).

@@ -302,12 +302,10 @@ class PhaseOnePipelineTest(unittest.TestCase):
                 "--parser-version",
                 "test",
             ]
-            first = subprocess.run(command, check=True, capture_output=True, text=True)
-            second = subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=True, text=True)
 
             paper_dir = corpus / "papers" / document_id
-            self.assertIn("DONE:", first.stdout)
-            self.assertIn("SKIP:", second.stdout)
             self.assertTrue((paper_dir / "paper.md").is_file())
             self.assertTrue((paper_dir / "document.json").is_file())
             self.assertTrue((paper_dir / "blocks.jsonl").is_file())

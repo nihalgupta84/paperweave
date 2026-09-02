@@ -7,6 +7,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 from xml.etree import ElementTree
 
@@ -14,8 +15,10 @@ from corpus_converter.citation_graph import build_knowledge_graph
 from corpus_converter.grobid import GrobidAdapter, enrich_corpus_with_grobid, parse_tei
 from corpus_converter.ingestion import pdf_preflight
 from corpus_converter.io import read_json, write_json, write_jsonl
-from corpus_converter.pipeline import run_mineru, run_pipeline
+from corpus_converter.pipeline import prune_mineru_output, run_mineru, run_pipeline
+from corpus_converter.providers import resolve_provider
 from corpus_converter.retrieval import build_search_index, search_corpus
+from corpus_converter.semantic import discover_dataset_mentions, find_mentions
 
 TEI = b"""<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt>
@@ -93,6 +96,80 @@ def make_document(corpus: Path, suffix: str, title: str, text: str, dataset: str
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_parser_cleanup_removes_only_completed_generated_document(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            corpus = Path(temporary)
+            document_id = "doc_" + "a" * 16
+            raw = corpus / "raw" / "mineru" / "paper" / "auto"
+            raw.mkdir(parents=True)
+            (raw / "paper.md").write_text("paper", encoding="utf-8")
+            paper = corpus / "papers" / document_id
+            paper.mkdir(parents=True)
+            (paper / ".done").write_text("done\n", encoding="utf-8")
+            write_json(paper / "document.json", {"parser": {"raw_directory": str(raw)}})
+            write_jsonl(
+                corpus / "manifests" / "documents.jsonl",
+                [
+                    {
+                        "document_id": document_id,
+                        "stages": {"mineru": {"status": "complete", "raw_directory": str(raw.parent)}},
+                    }
+                ],
+            )
+            result = prune_mineru_output(corpus, [document_id])
+            self.assertEqual(result["removed_document_folders"], 1)
+            self.assertFalse(raw.parent.exists())
+            self.assertFalse(read_json(paper / "document.json")["parser"]["raw_retained"])
+
+    def test_auto_provider_uses_llm_checker_ranked_installed_model(self) -> None:
+        checker_output = '{"models":[{"name":"small:latest","score":40},{"name":"qwen:7b","score":92}]}'
+        with (
+            patch("corpus_converter.providers.shutil.which", return_value="/usr/bin/llm-checker"),
+            patch(
+                "corpus_converter.providers.request_json",
+                side_effect=[
+                    {"models": [{"name": "qwen:7b"}, {"name": "small:latest"}]},
+                    {"models": [{"name": "qwen:7b"}]},
+                ],
+            ),
+            patch(
+                "corpus_converter.providers.subprocess.run",
+                return_value=CompletedProcess([], 0, checker_output, ""),
+            ),
+        ):
+            resolution = resolve_provider("auto", None, None)
+        self.assertEqual(resolution.effective, "ollama")
+        self.assertEqual(resolution.model, "qwen:7b")
+
+    def test_discovers_unlisted_datasets_without_metric_substring_false_positives(self) -> None:
+        blocks = [
+            {
+                "document_id": "doc_" + "a" * 16,
+                "block_id": "blk_" + "b" * 20,
+                "page_index": 2,
+                "section_path": ["Experiments"],
+                "section_role": "experiments",
+                "type": "text",
+                "text": (
+                    "We evaluate on the CARE and TeddyCup datasets and report Dice. Feature maps are compared. "
+                    "A public dataset like TotalSegmentator<sup>58</sup> is also evaluated."
+                ),
+            },
+            {
+                "document_id": "doc_" + "a" * 16,
+                "block_id": "blk_" + "c" * 20,
+                "page_index": 3,
+                "section_path": ["References"],
+                "section_role": "references",
+                "type": "text",
+                "text": "A cited optical-flow paper reports EPE on KITTI.",
+            },
+        ]
+        datasets = {item["name"] for item in discover_dataset_mentions(blocks, ())}
+        metrics = {item["name"] for item in find_mentions(blocks[:1], ("Dice", "mAP", "EPE"))}
+        self.assertEqual(datasets, {"CARE", "TeddyCup", "TotalSegmentator"})
+        self.assertEqual(metrics, {"Dice"})
+
     def test_package_native_run_completes_html_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

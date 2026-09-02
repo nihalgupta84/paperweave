@@ -8,7 +8,7 @@ PDF category trees.
 
 ## Current Phase
 
-Backend v0.2.2 release candidate implemented and verified, including multi-format
+Backend v0.3.0 release candidate implemented and verified, including multi-format
 ingestion, GROBID enrichment, local hybrid retrieval, corpus graphs, model
 fallback, failure isolation, and an installed-package `paperweave run` workflow.
 Web access is planned separately.
@@ -27,10 +27,16 @@ for installed-package use.
 The trusted extraction layer is deterministic and extractive. Rich model-authored
 narrative synthesis remains optional rather than being mixed into source records.
 
+Normal runs now use a concise terminal summary, omit optional visual assets,
+and remove newly generated MinerU intermediates after successful
+normalization. `--verbose`, `--json`, `--assets all`, and
+`--keep-parser-output` expose detailed/debug behavior explicitly.
+
 ## Key Decisions
 
 - `corpus/pdfs` is the canonical input path.
-- `corpus/raw/mineru` preserves parser output.
+- `corpus/raw/mineru` is temporary by default; users can preserve it explicitly
+  with `--keep-parser-output`.
 - `corpus/papers/<document_id>` is the clean document store.
 - SHA-256-derived document IDs are stable across title corrections.
 - Exact normalized-title matches share a work ID; fuzzy matches remain explicit
@@ -67,6 +73,15 @@ produced 163 blocks and 12 assets, validated 26/26 evidence locators, generated
 five collections and all six core reports, indexed 147 searchable blocks with
 FTS5, returned relevant hybrid-search results, and generated the paper and
 heterogeneous knowledge graphs.
+
+The v0.3 usability pass was checked against the same two-paper rectal-cancer
+corpus after its fixed-vocabulary failure was reported. Dataset extraction now
+identifies CARE, TeddyCup, WORD, and TotalSegmentator with block/page evidence,
+while token-boundary matching removes false EPE and mAP hits. With the optional
+`--assets figures` policy, fresh normalization retained 27 captioned
+figure/table assets instead of 99 parser images and left no broken raw-image
+links. Compaction of a copied real corpus reduced 227 files to 40, removed both
+completed MinerU intermediate trees, and preserved the 27 selected assets.
 
 For v0.2.1, the built wheel was installed into a clean Python 3.10 environment
 and `paperweave run` completed an HTML corpus through normalization, evidence

@@ -9,14 +9,15 @@ import re
 import shutil
 import subprocess
 import tempfile
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .grobid import enrich_corpus_with_grobid
 from .ingestion import ingest
-from .io import write_json
-from .manifest import load_manifest
+from .io import read_json, write_json
+from .manifest import load_manifest, save_manifest
 from .mineru import format_mineru_output
 from .reconcile import reconcile_mineru
 
@@ -134,6 +135,7 @@ def run_mineru(
     backend: str = "pipeline",
     method: str = "auto",
     force: bool = False,
+    stream_output: bool = False,
 ) -> dict[str, Any]:
     """Run MinerU for selected PDFs that do not already have raw output."""
     corpus = corpus.resolve()
@@ -147,9 +149,12 @@ def run_mineru(
         for record in load_manifest(corpus)
         if record.get("selected_for_extraction") and record.get("format") == "pdf"
     ]
-    pending = [
-        record for record in selected if force or record.get("stages", {}).get("mineru", {}).get("status") != "complete"
-    ]
+    pending = []
+    for record in selected:
+        normalized = corpus / "papers" / record["document_id"] / ".done"
+        mineru_complete = record.get("stages", {}).get("mineru", {}).get("status") == "complete"
+        if force or (not normalized.is_file() and not mineru_complete):
+            pending.append(record)
     if not selected:
         return {"status": "not_needed", "selected_pdfs": 0, "processed": 0}
     if not pending:
@@ -193,7 +198,8 @@ def run_mineru(
             )
             assert process.stdout is not None
             for line in process.stdout:
-                print(line, end="")
+                if stream_output:
+                    print(line, end="")
                 log_handle.write(line)
             return_code = process.wait()
 
@@ -204,11 +210,65 @@ def run_mineru(
         "status": "complete" if return_code == 0 else "partial",
         "selected_pdfs": len(selected),
         "processed": len(pending),
+        "processed_document_ids": [record["document_id"] for record in pending],
         "return_code": return_code,
         "log": str(log_path),
         "reconciliation": reconciliation,
         "version": _mineru_version(command),
     }
+
+
+def prune_mineru_output(corpus: Path, document_ids: list[str]) -> dict[str, int]:
+    """Remove newly generated MinerU intermediates after successful normalization."""
+    raw_root = (corpus / "raw" / "mineru").resolve()
+    manifest = load_manifest(corpus)
+    records = {record.get("document_id"): record for record in manifest}
+    removed = 0
+    for document_id in document_ids:
+        if not (corpus / "papers" / document_id / ".done").is_file():
+            continue
+        record = records.get(document_id, {})
+        raw_value = record.get("stages", {}).get("mineru", {}).get("raw_directory")
+        if not raw_value:
+            continue
+        raw_path = Path(raw_value).resolve()
+        paper_root = raw_path.parent if raw_path.name == "auto" else raw_path
+        if paper_root.parent != raw_root or not paper_root.is_dir():
+            continue
+        shutil.rmtree(paper_root)
+        document_path = corpus / "papers" / document_id / "document.json"
+        document = read_json(document_path, {})
+        if document:
+            document.setdefault("parser", {})["raw_directory"] = None
+            document["parser"]["raw_retained"] = False
+            write_json(document_path, document)
+        stage = record.setdefault("stages", {}).setdefault("mineru", {})
+        stage["raw_directory"] = None
+        stage["raw_retained"] = False
+        removed += 1
+    if manifest:
+        save_manifest(corpus, manifest)
+    for directory in (raw_root, raw_root.parent):
+        with suppress(OSError):
+            directory.rmdir()
+    return {"removed_document_folders": removed}
+
+
+def compact_corpus(corpus: Path, asset_policy: str = "none") -> dict[str, Any]:
+    """Compact an existing corpus while preserving canonical papers and evidence."""
+    corpus = corpus.expanduser().resolve()
+    raw_root = corpus / "raw" / "mineru"
+    normalization = {"done": 0, "skipped": 0, "failed": 0}
+    if raw_root.is_dir():
+        reconcile_mineru(corpus)
+        normalization = format_mineru_output(corpus_dir=corpus, force=True, asset_policy=asset_policy)
+    document_ids = [
+        record["document_id"]
+        for record in load_manifest(corpus)
+        if record.get("format") == "pdf" and record.get("selected_for_extraction")
+    ]
+    cleanup = prune_mineru_output(corpus, document_ids)
+    return {"corpus": str(corpus), "asset_policy": asset_policy, "normalization": normalization, "cleanup": cleanup}
 
 
 def run_pipeline(
@@ -222,7 +282,7 @@ def run_pipeline(
     rename_mode: str = "title",
     format_policy: str = "prefer-pdf",
     taxonomy_profile: str = "core",
-    semantic_provider: str = "deterministic",
+    semantic_provider: str = "auto",
     model: str | None = None,
     base_url: str | None = None,
     strict_provider: bool = False,
@@ -231,30 +291,25 @@ def run_pipeline(
     force_mineru: bool = False,
     force_normalization: bool = False,
     force_analysis: bool = False,
+    keep_parser_output: bool = False,
+    asset_policy: str = "none",
+    stream_parser_output: bool = False,
 ) -> dict[str, Any]:
     """Run the complete installed-package workflow for local or Drive input."""
     corpus = corpus.expanduser().resolve()
-    for relative in (
-        "downloaded",
-        "pdfs",
-        "sources",
-        "papers",
-        "records",
-        "indexes",
-        "collections",
-        "synthesis",
-        "logs",
-        "manifests",
-        "raw/mineru",
-        "raw/grobid",
-    ):
-        (corpus / relative).mkdir(parents=True, exist_ok=True)
 
     local_candidate = Path(input_value).expanduser()
     if local_candidate.exists():
         drive = None
         input_path = local_candidate.resolve()
+        if input_path.is_dir() and (input_path == corpus or input_path in corpus.parents):
+            raise ValueError(
+                f"Output cannot be inside the input folder ({corpus}). "
+                f"Choose a sibling location, for example: --corpus {input_path.parent}"
+            )
+        corpus.mkdir(parents=True, exist_ok=True)
     elif _drive_folder_id(input_value):
+        corpus.mkdir(parents=True, exist_ok=True)
         drive = download_google_drive(input_value, corpus / "downloaded", remote)
         input_path = corpus / "downloaded"
     else:
@@ -268,15 +323,19 @@ def run_pipeline(
         "drive": drive,
         "ingestion": ingest(input_path, corpus, rename_mode, format_policy),
     }
-    result["mineru"] = run_mineru(corpus, device, backend, method, force_mineru)
-    if result["mineru"]["selected_pdfs"]:
+    result["mineru"] = run_mineru(corpus, device, backend, method, force_mineru, stream_output=stream_parser_output)
+    raw_mineru_exists = (corpus / "raw" / "mineru").is_dir()
+    if result["mineru"].get("processed", 0) or raw_mineru_exists:
         result["normalization"] = format_mineru_output(
             corpus_dir=corpus,
             parser_version=result["mineru"].get("version"),
             force=force_normalization,
+            asset_policy=asset_policy,
         )
     else:
         result["normalization"] = {"done": 0, "skipped": 0, "failed": 0}
+    if not keep_parser_output and result["mineru"].get("processed_document_ids"):
+        result["parser_cleanup"] = prune_mineru_output(corpus, result["mineru"]["processed_document_ids"])
     if grobid_url:
         result["grobid"] = enrich_corpus_with_grobid(corpus, grobid_url, force_normalization, strict_grobid)
 

@@ -19,7 +19,7 @@ def reconcile_mineru(corpus: Path) -> dict[str, int]:
         raw_dir = corpus / "mineru_raw"
 
     records = load_manifest(corpus)
-    counts = {"complete": 0, "failed": 0, "skipped": 0}
+    counts = {"complete": 0, "failed": 0, "pending": 0, "skipped": 0}
     roots_by_stem = {path.name: path for path in raw_dir.iterdir() if path.is_dir()} if raw_dir.exists() else {}
     roots_by_hash = {}
 
@@ -36,10 +36,12 @@ def reconcile_mineru(corpus: Path) -> dict[str, int]:
         if markdown:
             update_stage(record, "mineru", "complete", raw_directory=str(root))
             counts["complete"] += 1
-        else:
+        elif root:
             update_stage(record, "mineru", "failed", error="No MinerU Markdown output found")
             counts["failed"] += 1
+        else:
+            counts["pending"] += 1
 
     save_manifest(corpus, records)
-    logger.info("MinerU reconciliation finished: %s", counts)
+    logger.debug("MinerU reconciliation finished: %s", counts)
     return counts

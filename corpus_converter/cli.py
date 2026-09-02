@@ -21,6 +21,45 @@ from .taxonomy import classify_corpus, generate_collections
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+SOURCE_DIRECTORY_NAMES = {"pdfs", "raw_pdfs"}
+
+
+def default_corpus_directory(input_value: str) -> Path:
+    """Choose a non-nested corpus location for a local input when omitted."""
+    candidate = Path(input_value).expanduser()
+    if candidate.exists():
+        candidate = candidate.resolve()
+        directory = candidate if candidate.is_dir() else candidate.parent
+        if directory.name.casefold() in SOURCE_DIRECTORY_NAMES:
+            return directory.parent
+    return (Path.cwd() / "corpus").resolve()
+
+
+def render_run_summary(result: dict) -> str:
+    """Render a concise human-readable result for the normal CLI path."""
+    corpus = Path(result["corpus"])
+    ingestion = result.get("ingestion", {})
+    postprocess = result.get("postprocess", {})
+    semantic = postprocess.get("semantic_provider", {})
+    graph = postprocess.get("graph", {})
+    cleanup = result.get("parser_cleanup", {})
+    model = semantic.get("model") or "deterministic extraction"
+    lines = [
+        "",
+        "PaperWeave completed",
+        f"  Papers:   {ingestion.get('works', 0)} works ({ingestion.get('documents', 0)} documents)",
+        f"  Reports:  {corpus / 'synthesis'}",
+        f"  Search:   {corpus / 'indexes' / 'search.sqlite3'}",
+        f"  Graph:    {graph.get('paper_nodes', 0)} papers, {graph.get('internal_citations', 0)} citations, "
+        f"{graph.get('related_paper_links', 0)} related links",
+        f"  Analysis: {model}",
+    ]
+    if cleanup.get("removed_document_folders"):
+        lines.append(f"  Cleanup:  removed parser intermediates for {cleanup['removed_document_folders']} documents")
+    log_path = result.get("mineru", {}).get("log")
+    if log_path:
+        lines.append(f"  Log:      {log_path}")
+    return "\n".join(lines)
 
 
 def corpus_path(value: str) -> Path:
@@ -80,14 +119,14 @@ def main() -> None:
 
     # ── package-native end-to-end workflow ─────────────────────────
     run_parser = subparsers.add_parser("run", help="Run the complete workflow from documents to reports.")
-    run_parser.add_argument("--input", required=True, help="Local file/folder or Google Drive folder URL/ID.")
+    run_parser.add_argument("input_path", nargs="?", help="Local file/folder or Google Drive folder URL/ID.")
+    run_parser.add_argument("--input", dest="input_option", help=argparse.SUPPRESS)
     run_parser.add_argument(
         "--corpus",
         "--corpus-dir",
-        required=True,
         type=Path,
         dest="corpus",
-        help="Output corpus directory (created when missing).",
+        help="Output directory. Defaults to ./corpus or the parent of a pdfs/raw_pdfs folder.",
     )
     run_parser.add_argument("--remote", help="rclone remote for Google Drive input.")
     run_parser.add_argument("--device", choices=["auto", "gpu", "cpu"], default="auto")
@@ -98,8 +137,8 @@ def main() -> None:
     run_parser.add_argument("--taxonomy-profile", default="core")
     run_parser.add_argument(
         "--semantic-provider",
-        choices=["deterministic", "ollama", "openai-compatible"],
-        default="deterministic",
+        choices=["auto", "deterministic", "ollama", "openai-compatible"],
+        default="auto",
     )
     run_parser.add_argument("--model")
     run_parser.add_argument("--base-url", help="OpenAI-compatible model endpoint.")
@@ -110,6 +149,9 @@ def main() -> None:
     run_parser.add_argument("--force-mineru", action="store_true")
     run_parser.add_argument("--force-normalization", action="store_true")
     run_parser.add_argument("--force-analysis", action="store_true")
+    run_parser.add_argument("--keep-parser-output", action="store_true", help="Retain MinerU intermediate files.")
+    run_parser.add_argument("--assets", choices=["figures", "all", "none"], default="none")
+    run_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
 
     # ── ingest ──────────────────────────────────────────────────────
     ingest_parser = subparsers.add_parser("ingest", help="Discover, deduplicate, and stage documents.")
@@ -122,6 +164,10 @@ def main() -> None:
 
     # ── capabilities ────────────────────────────────────────────────
     subparsers.add_parser("capabilities", help="Show system capabilities (GPU, Ollama, etc.).")
+
+    compact_parser = subparsers.add_parser("compact", help="Remove retained parser intermediates safely.")
+    compact_parser.add_argument("--corpus", required=True, type=corpus_path)
+    compact_parser.add_argument("--assets", choices=["figures", "all", "none"], default="none")
 
     # ── normalize-non-pdf ───────────────────────────────────────────
     normalize_parser = subparsers.add_parser("normalize-non-pdf", help="Normalize DOCX/HTML documents.")
@@ -208,9 +254,13 @@ def main() -> None:
         from .pipeline import run_pipeline
 
         try:
+            input_value = args.input_path or args.input_option
+            if not input_value:
+                parser.error("paperweave run requires a file or folder, for example: paperweave run papers")
+            corpus = args.corpus or default_corpus_directory(input_value)
             result = run_pipeline(
-                args.input,
-                args.corpus,
+                input_value,
+                corpus,
                 remote=args.remote,
                 device=args.device,
                 backend=args.backend,
@@ -227,6 +277,9 @@ def main() -> None:
                 force_mineru=args.force or args.force_mineru,
                 force_normalization=args.force or args.force_normalization,
                 force_analysis=args.force or args.force_analysis,
+                keep_parser_output=args.keep_parser_output,
+                asset_policy=args.assets,
+                stream_parser_output=args.verbose,
             )
         except (FileNotFoundError, RuntimeError, ValueError) as error:
             parser.exit(2, f"paperweave: error: {error}\n")
@@ -244,6 +297,10 @@ def main() -> None:
         )
     elif args.command == "capabilities":
         result = compute_capabilities()
+    elif args.command == "compact":
+        from .pipeline import compact_corpus
+
+        result = compact_corpus(args.corpus, args.assets)
     elif args.command == "normalize-non-pdf":
         result = normalize_non_pdf(args.corpus, args.force)
     elif args.command == "evaluate":
@@ -310,7 +367,10 @@ def main() -> None:
             args.strict_provider,
             entities_path=getattr(args, "entities", None),
         )
-    print(json.dumps(result, indent=2, default=str))
+    if args.command == "run" and not args.json:
+        print(render_run_summary(result))
+    else:
+        print(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

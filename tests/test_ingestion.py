@@ -4,8 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from corpus_converter.cli import default_corpus_directory
 from corpus_converter.ingestion import (
     clean_title,
+    discover,
     extract_title,
     extract_year_from_filename,
     slugify,
@@ -15,6 +17,25 @@ from corpus_converter.ingestion import (
 
 
 class IngestionTest(unittest.TestCase):
+    def test_discovery_ignores_nested_generated_corpus(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            (source / "paper.pdf").write_bytes(b"%PDF-source")
+            nested = source / "corpus"
+            (nested / "manifests").mkdir(parents=True)
+            (nested / "manifests" / "last_pipeline.json").write_text("{}", encoding="utf-8")
+            (nested / "pdfs").mkdir()
+            (nested / "pdfs" / "duplicate.pdf").write_bytes(b"%PDF-source")
+            supported, _ = discover(source)
+            self.assertEqual(supported, [source / "paper.pdf"])
+
+    def test_default_corpus_location_avoids_nesting_inside_raw_pdfs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "corpus" / "raw_pdfs"
+            source.mkdir(parents=True)
+            self.assertEqual(default_corpus_directory(str(source)), root / "corpus")
+
     def test_clean_title(self):
         self.assertEqual(clean_title("  A Study on NLP\n\t  "), "A Study on NLP")
         self.assertEqual(clean_title("...Paper Title..."), "Paper Title")

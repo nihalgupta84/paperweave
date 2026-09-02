@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2026-09-02
+
+- Replace the verbose run result with a concise human summary; retain full
+  parser output in logs and expose it through `--verbose` or `--json`.
+- Accept `paperweave run <path>` and infer a safe corpus destination, rejecting
+  output nested inside input and ignoring nested generated corpora.
+- Discover named datasets from evidence text instead of relying only on a fixed
+  vocabulary; use token-boundary matching to prevent false metric mentions.
+- Create a compact text corpus by default and remove newly generated MinerU
+  intermediates after successful normalization; visual assets are opt-in.
+- Add `paperweave compact` for existing corpora and write a navigation README
+  into every generated corpus.
+- Add optional automatic local-model selection using llm-checker's ranking of
+  already-installed Ollama models, with deterministic fallback.
+- Rewrite public documentation without project-specific paths and add focused
+  output and graph guides.
+
 ## [0.2.2] - 2026-09-01
 
 - Remove a harmless unused workflow variable that failed clean CI linting.

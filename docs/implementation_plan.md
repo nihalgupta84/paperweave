@@ -28,6 +28,10 @@ graphs are implemented as optional or automatically generated extensions. The
 complete pipeline is exposed through the installed `paperweave run` command;
 repository shell scripts are no longer required for normal use.
 
+The v0.3 usability pass adds safe output-path inference, concise terminal
+reporting, compact parser storage, open-vocabulary dataset-name discovery, and
+optional llm-checker-based selection among installed Ollama models.
+
 ## Open-Source Hardening Status
 
 Implemented:
@@ -60,9 +64,9 @@ corpus/
 ├── sources/
 │   ├── docx/                     # Selected DOCX sources
 │   └── html/                     # Selected HTML sources
-├── raw/
-│   ├── mineru/                   # Untouched MinerU output
-│   └── grobid/                   # Optional metadata output
+├── raw/                          # Optional retained parser output
+│   ├── mineru/
+│   └── grobid/
 ├── papers/
 │   └── <document_id>/
 │       ├── paper.md
@@ -101,7 +105,8 @@ readers may support them, but new writes use `pdfs/`, `raw/mineru/`, and
    matches remain review candidates; automatic merging requires an exact DOI or
    arXiv match and preserves both original work directories in quarantine.
 4. PDFs are never duplicated into taxonomy folders.
-5. Raw parser output is never modified by normalization.
+5. Retained raw parser output is never modified; default temporary output is
+   removed only after normalized completion is verified.
 6. Every extracted claim or result must cite normalized evidence blocks.
 7. Generated collections and reports can always be rebuilt from records.
 8. Pipeline stages are resumable and skip completed inputs by default.
@@ -114,7 +119,7 @@ Deliverables:
 
 - Scan/copy supported documents into canonical source directories.
 - Write `manifests/documents.jsonl` with hashes and stable IDs.
-- Run MinerU into `corpus/raw/mineru`.
+- Run MinerU into `corpus/raw/mineru`, retaining it only when requested.
 - Normalize each MinerU paper into one flat `papers/<document_id>/` directory.
 - Produce `paper.md`, `document.json`, `blocks.jsonl`, and `assets/`.
 - Report per-stage corpus status.

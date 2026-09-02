@@ -220,7 +220,9 @@ def synthesize_incremental(corpus: Path, changed_work_ids: set[str] | None = Non
         "references.md",
         "all_papers.md",
     }
-    reports_exist = all((corpus / "synthesis" / name).is_file() for name in expected_reports)
+    reports_exist = (
+        all((corpus / "synthesis" / name).is_file() for name in expected_reports) and (corpus / "README.md").is_file()
+    )
     if state_file.is_file() and reports_exist and not detected_changes and previous == current:
         logger.info("Synthesis is up-to-date. Skipping full regeneration.")
         return {"works": len(current), "reports": 6, "changed_works": 0, "regenerated": 0}
@@ -242,6 +244,7 @@ def synthesize_corpus(corpus: Path) -> dict[str, int]:
     write_review(corpus, records)
     write_references(corpus, records)
     write_all_papers(corpus, records)
+    write_corpus_readme(corpus, records)
 
     manifest = load_manifest(corpus)
     included = {document_id for work, _, _, _ in records for document_id in work["document_ids"]}
@@ -259,3 +262,27 @@ def synthesize_corpus(corpus: Path) -> dict[str, int]:
 
     logger.info("Synthesized %d reports across %d scholarly works", 6, len(records))
     return {"works": len(records), "reports": 6}
+
+
+def write_corpus_readme(corpus: Path, records: list[tuple[Any, ...]]) -> None:
+    """Write a short navigation page at the corpus root."""
+    lines = [
+        "# PaperWeave corpus",
+        "",
+        f"This corpus contains **{len(records)} scholarly works**.",
+        "",
+        "## Start here",
+        "",
+        "- [Datasets](synthesis/datasets.md)",
+        "- [Methodology](synthesis/methodology.md)",
+        "- [Experiments and results](synthesis/experiments.md)",
+        "- [Literature review](synthesis/literature_review.md)",
+        "- [References](synthesis/references.md)",
+        "- [Combined paper text](synthesis/all_papers.md)",
+        "- [Paper graph](synthesis/citation_graph.md)",
+        "",
+        "`papers/` contains normalized individual documents. `collections/` contains generated topic views.",
+        "The remaining directories store indexes, provenance, and reproducible machine-readable records.",
+        "",
+    ]
+    (corpus / "README.md").write_text("\n".join(lines), encoding="utf-8")
