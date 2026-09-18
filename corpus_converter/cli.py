@@ -150,6 +150,7 @@ def main() -> None:
     run_parser.add_argument("--force-normalization", action="store_true")
     run_parser.add_argument("--force-analysis", action="store_true")
     run_parser.add_argument("--keep-parser-output", action="store_true", help="Retain MinerU intermediate files.")
+    run_parser.add_argument("--mineru-path", help="Path to compatible MinerU (3.x) executable.")
     run_parser.add_argument("--assets", choices=["figures", "all", "none"], default="none")
     run_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
 
@@ -278,6 +279,7 @@ def main() -> None:
                 force_normalization=args.force or args.force_normalization,
                 force_analysis=args.force or args.force_analysis,
                 keep_parser_output=args.keep_parser_output,
+                mineru_path=args.mineru_path,
                 asset_policy=args.assets,
                 stream_parser_output=args.verbose,
             )

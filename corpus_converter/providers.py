@@ -29,6 +29,74 @@ def request_json(
         return json.loads(response.read().decode())
 
 
+def _mineru_version(command: str) -> str | None:
+    try:
+        output = subprocess.run([command, "--version"], check=False, text=True, capture_output=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r"\d+(?:\.\d+)+", f"{output.stdout} {output.stderr}")
+    return match.group(0) if match else None
+
+
+def resolve_mineru_command(explicit: str | os.PathLike[str] | None = None) -> tuple[str | None, str | None]:
+    """Find a functional MinerU binary (version 3.x), inspecting explicit paths, env vars, known conda envs, and PATH."""
+    candidates: list[str] = []
+    if explicit:
+        candidates.append(str(explicit))
+    if os.environ.get("MINERU_BIN"):
+        candidates.append(os.environ["MINERU_BIN"])
+    if os.environ.get("MINERU_PATH"):
+        candidates.append(os.environ["MINERU_PATH"])
+
+    from pathlib import Path
+
+    known_conda_paths = [
+        "/workspace/miniconda3/envs/mineru/bin/mineru",
+        str(Path.home() / "miniconda3/envs/mineru/bin/mineru"),
+        str(Path.home() / ".conda/envs/mineru/bin/mineru"),
+        "/opt/conda/envs/mineru/bin/mineru",
+    ]
+    for kp in known_conda_paths:
+        if os.path.isfile(kp) and os.access(kp, os.X_OK):
+            candidates.append(kp)
+
+    which_cmd = shutil.which("mineru")
+    if which_cmd and which_cmd not in candidates:
+        candidates.append(which_cmd)
+
+    v3_candidate = None
+    v4_candidate = None
+
+    for cand in candidates:
+        if not (os.path.isfile(cand) and os.access(cand, os.X_OK)):
+            continue
+        ver = _mineru_version(cand)
+        if ver and ver.startswith("3."):
+            return cand, ver
+        elif ver and ver.startswith("4."):
+            if not v4_candidate:
+                v4_candidate = (cand, ver)
+        else:
+            try:
+                proc = subprocess.run([cand, "--help"], capture_output=True, text=True, timeout=10)
+                txt = f"{proc.stdout} {proc.stderr}"
+            except Exception:
+                txt = ""
+            if "-p, --path" in txt or "--path" in txt:
+                return cand, ver
+            elif "COMMAND [ARGS]" in txt and "parse" in txt:
+                if not v4_candidate:
+                    v4_candidate = (cand, ver)
+            elif not v3_candidate:
+                v3_candidate = (cand, ver)
+
+    if v3_candidate:
+        return v3_candidate
+    if v4_candidate:
+        return v4_candidate
+    return None, None
+
+
 def compute_capabilities() -> dict[str, Any]:
     """Detect available compute resources and optional workflow commands."""
     gpu = {"available": False, "name": None, "memory_mb": None}
@@ -41,9 +109,10 @@ def compute_capabilities() -> dict[str, Any]:
                 check=False,
                 timeout=10,
             ).stdout.splitlines()
-            if output and "," in output[0] and output[0].rsplit(",", 1)[-1].strip().isdigit():
+            if output and "," in output[0]:
                 name, memory = output[0].rsplit(",", 1)
-                gpu = {"available": True, "name": name.strip(), "memory_mb": int(memory.strip())}
+                memory_mb = int(memory.strip()) if memory.strip().isdigit() else None
+                gpu = {"available": True, "name": name.strip(), "memory_mb": memory_mb}
         except Exception as e:
             logger.debug("nvidia-smi query failed: %s", e)
 
@@ -61,10 +130,12 @@ def compute_capabilities() -> dict[str, Any]:
         except Exception as e:
             logger.debug("torch cuda check failed: %s", e)
 
+    mineru_cmd, mineru_ver = resolve_mineru_command()
     return {
         "gpu": gpu,
         "commands": {
-            "mineru": shutil.which("mineru"),
+            "mineru": mineru_cmd,
+            "mineru_version": mineru_ver,
             "rclone": shutil.which("rclone"),
             "ollama": shutil.which("ollama"),
             "llm_checker": shutil.which("llm-checker"),

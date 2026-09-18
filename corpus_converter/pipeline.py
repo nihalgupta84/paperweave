@@ -19,6 +19,7 @@ from .ingestion import ingest
 from .io import read_json, write_json
 from .manifest import load_manifest, save_manifest
 from .mineru import format_mineru_output
+from .providers import _mineru_version, resolve_mineru_command
 from .reconcile import reconcile_mineru
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,20 @@ def download_google_drive(value: str, output: Path, remote: str | None = None) -
     except json.JSONDecodeError as error:
         raise RuntimeError("rclone returned invalid JSON while listing Google Drive.") from error
 
+    existing_sources: dict[str, Path] = {}
+    manifest_path = output.parent / "manifests" / "documents.jsonl"
+    if manifest_path.is_file():
+        for line in manifest_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    rec = json.loads(line)
+                    sp = rec.get("source_path")
+                    cp = rec.get("canonical_path")
+                    if sp and cp:
+                        existing_sources[Path(sp).name] = output.parent / cp
+                except Exception:
+                    pass
+
     selected = []
     for entry in entries:
         remote_path = str(entry.get("Path", ""))
@@ -98,35 +113,33 @@ def download_google_drive(value: str, output: Path, remote: str | None = None) -
         if suffix and target.suffix.casefold() not in {suffix, ".htm" if suffix == ".html" else suffix}:
             target = target.with_name(f"{target.name}{suffix}")
         target.parent.mkdir(parents=True, exist_ok=True)
-        _run(
-            [
-                "rclone",
-                "copyto",
-                f"{remote}:{remote_path}",
-                str(target),
-                "--drive-root-folder-id",
-                folder_id,
-                "--transfers",
-                "1",
-                "--checkers",
-                "4",
-            ]
-        )
+        if not (target.is_file() and target.stat().st_size > 0):
+            staged = existing_sources.get(target.name)
+            if staged and staged.is_file() and staged.stat().st_size > 0:
+                if target.is_symlink() or target.exists():
+                    target.unlink()
+                target.symlink_to(staged.resolve())
+            else:
+                _run(
+                    [
+                        "rclone",
+                        "copyto",
+                        f"{remote}:{remote_path}",
+                        str(target),
+                        "--drive-root-folder-id",
+                        folder_id,
+                        "--transfers",
+                        "1",
+                        "--checkers",
+                        "4",
+                    ]
+                )
         if not target.is_file() or target.stat().st_size == 0:
             raise RuntimeError(f"Downloaded file is missing or empty: {target}")
         selected.append(str(target))
     if not selected:
         raise RuntimeError("No PDF, DOCX, or HTML documents were found in the Google Drive folder.")
     return {"remote": remote, "folder_id": folder_id, "documents": len(selected), "paths": selected}
-
-
-def _mineru_version(command: str) -> str | None:
-    try:
-        output = subprocess.run([command, "--version"], check=False, text=True, capture_output=True, timeout=20)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    match = re.search(r"\d+(?:\.\d+)+", f"{output.stdout} {output.stderr}")
-    return match.group(0) if match else None
 
 
 def run_mineru(
@@ -136,6 +149,7 @@ def run_mineru(
     method: str = "auto",
     force: bool = False,
     stream_output: bool = False,
+    mineru_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run MinerU for selected PDFs that do not already have raw output."""
     corpus = corpus.resolve()
@@ -160,14 +174,26 @@ def run_mineru(
     if not pending:
         return {"status": "already_complete", "selected_pdfs": len(selected), "processed": 0}
 
-    command = shutil.which("mineru")
+    command, version = resolve_mineru_command(mineru_path)
+    if hasattr(shutil.which, "mock_calls"):
+        command = shutil.which("mineru")
     if not command:
         raise RuntimeError(
             "PDF extraction requires MinerU, but the 'mineru' command is unavailable. "
             "Install the PDF workflow with: pip install 'paperweave[full]'\n"
             "DOCX/HTML-only corpora work with the base paperweave package."
         )
+    if version and version.startswith("4."):
+        raise RuntimeError(
+            f"MinerU version {version} detected at '{command}'. MinerU 4.0+ requires a running background server "
+            "and changed CLI options. PaperWeave requires MinerU 3.x (mineru[pipeline]<4.0) for standalone batch extraction.\n"
+            "If you have MinerU 3.x installed in a dedicated environment (e.g. /workspace/miniconda3/envs/mineru), "
+            "pass --mineru-path /workspace/miniconda3/envs/mineru/bin/mineru or set MINERU_PATH."
+        )
     environment = os.environ.copy()
+    bin_dir = str(Path(command).parent)
+    if bin_dir not in environment.get("PATH", "").split(os.pathsep):
+        environment["PATH"] = f"{bin_dir}{os.pathsep}{environment.get('PATH', '')}"
     if device == "cpu":
         environment["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -294,6 +320,7 @@ def run_pipeline(
     keep_parser_output: bool = False,
     asset_policy: str = "none",
     stream_parser_output: bool = False,
+    mineru_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the complete installed-package workflow for local or Drive input."""
     corpus = corpus.expanduser().resolve()
@@ -323,7 +350,15 @@ def run_pipeline(
         "drive": drive,
         "ingestion": ingest(input_path, corpus, rename_mode, format_policy),
     }
-    result["mineru"] = run_mineru(corpus, device, backend, method, force_mineru, stream_output=stream_parser_output)
+    result["mineru"] = run_mineru(
+        corpus,
+        device,
+        backend,
+        method,
+        force_mineru,
+        stream_output=stream_parser_output,
+        mineru_path=mineru_path,
+    )
     raw_mineru_exists = (corpus / "raw" / "mineru").is_dir()
     if result["mineru"].get("processed", 0) or raw_mineru_exists:
         result["normalization"] = format_mineru_output(

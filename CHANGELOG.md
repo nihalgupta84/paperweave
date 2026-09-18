@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2] - 2026-09-18
+
+- Intelligently discover and prioritize compatible MinerU 3.x installations from dedicated conda environments (`/workspace/miniconda3/envs/mineru`, `~/miniconda3/envs/mineru`, etc.) and prevent conflicts with incompatible MinerU 4.x CLI.
+- Add `--mineru-path` CLI option and `MINERU_PATH` / `MINERU_BIN` environment variables for explicit executable selection.
+- Isolate subprocess environment PATH to the detected MinerU executable directory to avoid cross-environment library shadowing.
+- Handle containerized GPU detection when `nvidia-smi` reports `[Insufficient Permissions]` for memory attributes.
+
 ## [0.4.1] - 2026-09-18
 
 - Streamline `README.md` with interactive collapsible `<details>` dropdowns and dedicated setup guides for Google Drive rclone (`docs/setup_rclone.md`) and local Ollama (`docs/setup_ollama.md`).
