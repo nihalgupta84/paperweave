@@ -19,25 +19,71 @@ DEFAULT_ENTITIES_FILE = Path(__file__).resolve().parent / "taxonomies" / "entiti
 ENTITY_ROLES = {"abstract", "methodology", "experiments", "datasets", "results", "discussion", "conclusion"}
 DATASET_STOPWORDS = {
     "a",
+    "across",
     "an",
+    "as",
+    "at",
     "benchmark",
+    "by",
     "clinical",
+    "cohort",
+    "cohorts",
     "data",
     "different",
     "external",
     "for",
+    "from",
+    "in",
     "internal",
+    "into",
+    "its",
     "new",
+    "of",
+    "on",
+    "onto",
     "our",
+    "per",
     "private",
     "public",
     "segmentation",
+    "setting",
+    "settings",
     "source",
     "test",
     "testing",
     "the",
+    "their",
+    "through",
+    "to",
     "training",
+    "using",
     "validation",
+    "via",
+    "with",
+}
+
+# Full phrases or single words that, after stopword stripping, are never
+# legitimate standalone dataset names.  Checked via casefold().
+DATASET_FALSE_POSITIVES = {
+    # Demonstratives / conjunctions / adverbs
+    "although", "because", "besides", "consequently", "furthermore",
+    "however", "moreover", "nevertheless", "nonetheless", "notably",
+    "notable", "particularly", "respectively", "similarly", "specifically",
+    "such", "that", "therefore", "these", "this", "those", "thus",
+    "additionally", "alternatively", "conversely", "including",
+    "meanwhile", "otherwise", "subsequently", "whereas",
+    # Imaging modalities — never a dataset by themselves
+    "ct", "mri", "pet", "spect", "xray", "x-ray", "ultrasound",
+    "histology", "endoscopy", "fluoroscopy", "mammography", "oct",
+    "dermoscopy", "fundoscopy", "ecg", "eeg",
+    # Anatomy / clinical terms that appear near "dataset" but are not names
+    "abdominal", "cardiac", "cerebral", "cervical", "colorectal",
+    "hepatic", "lung", "pancreatic", "prostate", "rectal", "renal",
+    "retinal", "thoracic",
+    # Generic qualifiers
+    "clinical", "large scale", "large-scale", "medical", "multicenter",
+    "multicentre", "prospective", "retrospective", "single-center",
+    "single-centre",
 }
 
 
@@ -145,18 +191,49 @@ def find_mentions(blocks: list[dict[str, Any]], terms: tuple[str, ...]) -> list[
 
 
 def _clean_dataset_candidate(value: str) -> str | None:
+    # Strip citation references and numeric parentheticals
     value = re.sub(r"\[[^]]+\]|\([^)]*\d[^)]*\)", " ", value)
+    # Normalize spaced acronyms like "W O R D" -> "WORD"
+    value = re.sub(r"\b([A-Z])\s+([A-Z])\s+([A-Z])\s+([A-Z])\b", r"\1\2\3\4", value)
+    value = re.sub(r"\b([A-Z])\s+([A-Z])\s+([A-Z])\b", r"\1\2\3", value)
     value = re.sub(r"\s+", " ", value).strip(" ,.;:–—-")
+
+    # Reject candidates containing sentence-ending punctuation inside them
+    # (catches leaks like "Data. Considering")
+    if re.search(r"[.!?]\s+[A-Z]", value):
+        return None
+
     words = value.split()
     while words and words[0].casefold() in DATASET_STOPWORDS:
         words.pop(0)
     while words and words[-1].casefold() in DATASET_STOPWORDS:
         words.pop()
     value = " ".join(words)
+
     if not value or len(value) > 80 or len(words) > 6:
         return None
     if value.casefold() in DATASET_STOPWORDS or not re.search(r"[A-Z0-9]", value):
         return None
+
+    # Reject if the entire cleaned value matches a known false-positive
+    if value.casefold() in DATASET_FALSE_POSITIVES:
+        return None
+
+    # Reject multi-word candidates starting with section-title prefixes
+    # (catches "Construction of CARE", "Description of WORD", "Overview of ...")
+    if len(words) >= 2 and re.match(
+        r"^(?:construction|description|overview|analysis|evaluation|"
+        r"comparison|application|introduction|utilization|collection|"
+        r"preparation|annotation|curation|summary|details)\b",
+        value, re.I,
+    ):
+        return None
+
+    # Reject single-word candidates that look like common English words
+    # (not acronyms / proper nouns) — must have >= 3 chars or digits
+    if len(words) == 1 and len(value) < 3 and not re.search(r"[0-9]", value):
+        return None
+
     return value
 
 
@@ -191,15 +268,76 @@ def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[st
     return list(found.values())
 
 
+def discover_metric_mentions(
+    blocks: list[dict[str, Any]], configured: tuple[str, ...]
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Discover metric names from result/experiment blocks via patterns.
+
+    Returns found metric dicts and a set of all metric names (configured + discovered).
+    """
+    relevant = [
+        block for block in blocks
+        if block.get("section_role") in {"results", "experiments", "datasets", "abstract", "methodology"}
+        and block.get("type") not in {"header", "footer", "page_number", "page_footnote"}
+        and block.get("text", "").strip()
+    ]
+    # Start with configured mentions
+    found = {item["name"].casefold(): item for item in find_mentions(relevant, configured)}
+    all_names = {m.casefold() for m in configured}
+
+    # Auto-discover metrics via patterns like "DSC of 0.95", "91.0% mIoU", or "(ASD: 1.25)"
+    # Matches true acronyms (>=2 uppercase chars like DSC, HD95, AUC),
+    # lowercase-prefixed acronyms (e.g. mIoU, mAP, cDice),
+    # or single-letter + digit combinations (e.g. F1, R2).
+    metric_token = r"(?:[A-Z]{2,8}[0-9]*|[a-z]{1,2}[A-Z][A-Za-z0-9]{1,6}|[A-Z][0-9]+)"
+    auto_patterns = [
+        # "METRIC of/= 0.95" or "METRIC: 0.95"
+        re.compile(rf"\b({metric_token})\s*(?:of|=|:)\s*\d+\.?\d*"),
+        # "0.95 METRIC" or "95.2% METRIC"
+        re.compile(rf"\d+\.?\d*\s*%?\s+({metric_token})\b"),
+        # Parenthetical "(METRIC: 0.95)" or "(METRIC = 0.95)"
+        re.compile(rf"\(\s*({metric_token})\s*[:=]\s*\d+\.?\d*\)"),
+    ]
+    # Ignore abbreviations that are almost never metric names
+    metric_blocklist = {
+        "TABLE", "FIG", "FIGURE", "REF", "EQ", "SEC", "SECTION",
+        "VOL", "NO", "PP", "ET", "AL", "IEEE", "ACM", "MICCAI",
+        "CVPR", "ICCV", "ECCV", "NIPS", "ICML", "AAAI", "ARXIV",
+        "GPU", "CPU", "RAM", "GAN", "CNN", "RNN", "SAM", "BERT",
+        "ADAM", "SGD", "LR", "BS", "BN", "ReLU",
+        # Modalities / Medical / Non-metric abbreviations
+        "CT", "MRI", "PET", "US", "CI", "DL", "ML", "AI", "ID",
+        "TOTAL", "SAMPLE", "PATIENT", "STUDY", "CLASS", "GROUP",
+        "VERSION", "STAGE", "PHASE", "TYPE", "CASE", "CASES",
+        "ROI", "VOI", "GT", "HU", "FOV", "TE", "TR", "SD", "SE",
+        "NVIDIA", "INTEL", "AMD", "GB", "MB", "KB", "TB", "WORD",
+    }
+
+    for block in relevant:
+        text = block.get("text", "")
+        for pattern in auto_patterns:
+            for match in pattern.finditer(text):
+                name = match.group(1)
+                key = name.casefold()
+                if key not in found and name.upper() not in metric_blocklist and len(name) >= 2:
+                    found[key] = {"name": name, "evidence": [evidence(block)]}
+                    all_names.add(key)
+
+    return list(found.values()), all_names
+
+
 def result_sentences(blocks: list[dict[str, Any]], metrics: tuple[str, ...], limit: int = 20) -> list[dict[str, Any]]:
     """Extract candidate result sentences containing numerical digits and metric keywords."""
     results = []
     metric_pattern = "|".join(re.escape(metric) for metric in metrics)
+    # Also match any uppercase abbreviation (2-8 chars) near a number as
+    # a fallback — so domain-specific metrics aren't silently dropped.
+    combined = metric_pattern + r"|[A-Z][A-Za-z0-9]{1,7}" if metric_pattern else r"[A-Z][A-Za-z0-9]{1,7}"
     for block in blocks:
         if block.get("section_role") not in {"results", "experiments", "datasets"}:
             continue
         for sentence_text in re.split(r"(?<=[.!?])\s+", block.get("text", "")):
-            if re.search(r"\d", sentence_text) and re.search(metric_pattern, sentence_text, re.I):
+            if re.search(r"\d", sentence_text) and re.search(combined, sentence_text):
                 results.append(statement(block, sentence_text.strip()))
                 if len(results) >= limit:
                     return results
@@ -233,7 +371,7 @@ def analyze_document(
     limitation_blocks = select(blocks, {"limitations", "discussion", "conclusion"}, 3)
     entity_blocks = relevant_entity_blocks(blocks)
     found_datasets = discover_dataset_mentions(blocks, datasets)
-    found_metrics = find_mentions(entity_blocks, metrics)
+    found_metrics, all_metric_names = discover_metric_mentions(blocks, metrics)
 
     # Extract bibliographic references
     extract_and_save_references(paper_dir, record_dir, document["document_id"])
@@ -277,7 +415,7 @@ def analyze_document(
         "metrics": found_metrics,
         "baselines": [],
         "implementation_details": [statement(block) for block in experiment_blocks],
-        "results": result_sentences(blocks, metrics),
+        "results": result_sentences(blocks, tuple(all_metric_names | set(m.casefold() for m in metrics))),
         "ablations": [
             statement(block) for block in select(blocks, {"results"}, 4) if "ablation" in block.get("text", "").lower()
         ],
@@ -315,8 +453,24 @@ def rebuild_work_aggregates(record_dir: Path, work: dict[str, Any]) -> None:
         "document_ids": work["document_ids"],
         "extraction_mode": "deterministic_extractive_aggregate",
     }
+
+    def _dedup_items(items: list[dict[str, Any]], key_field: str = "statement") -> list[dict[str, Any]]:
+        """Deduplicate items by a text key, keeping the entry with the most evidence."""
+        seen: dict[str, dict[str, Any]] = {}
+        for item in items:
+            text = item.get(key_field) or item.get("name", "")
+            k = text.strip().casefold()
+            if not k:
+                continue
+            existing = seen.get(k)
+            if existing is None or len(item.get("evidence", [])) > len(existing.get("evidence", [])):
+                seen[k] = item
+        return list(seen.values())
+
     for field in analysis_fields:
-        aggregate_analysis[field] = [item for value in analyses for item in value.get(field, [])]
+        aggregate_analysis[field] = _dedup_items(
+            [item for value in analyses for item in value.get(field, [])]
+        )
 
     experiment_fields = (
         "datasets",
@@ -333,7 +487,11 @@ def rebuild_work_aggregates(record_dir: Path, work: dict[str, Any]) -> None:
         "document_ids": work["document_ids"],
     }
     for field in experiment_fields:
-        aggregate_experiments[field] = [item for value in experiments for item in value.get(field, [])]
+        key_field = "name" if field in ("datasets", "metrics") else "statement"
+        aggregate_experiments[field] = _dedup_items(
+            [item for value in experiments for item in value.get(field, [])],
+            key_field=key_field,
+        )
 
     # Aggregate references
     all_refs = []

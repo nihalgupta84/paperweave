@@ -56,8 +56,47 @@ def title_key(value: str) -> str:
     """Generate a normalized key for duplicate title comparison."""
     value = value.casefold()
     value = re.sub(r"\b(preprint|accepted manuscript|author manuscript|final|revised)\b", " ", value)
+    # Strip subtitle after common separators so preprint titles with added
+    # subtitles (e.g. ": Development and Validation of X") match the base title.
+    value = re.sub(r"\s*[:\u2014\u2013]\s+.*$", "", value)
     value = re.sub(r"[^a-z0-9]+", "", value)
     return value
+
+
+def author_surnames(authors: list) -> set[str]:
+    """Extract normalized last-name set from an author list."""
+    surnames: set[str] = set()
+    for author in authors:
+        raw = author if isinstance(author, str) else (author.get("name", "") if isinstance(author, dict) else "")
+        if not raw:
+            continue
+        raw = re.sub(r"\b(et\s+al\.?|and)\b.*$", "", raw, flags=re.I)
+        # Split on delimiters that separate distinct author names (commas, semicolons, bullets, unicode separators)
+        sub_authors = re.split(r"[,;•\n\r\u2c00-\u2c5f\ufeff]+", raw)
+        for sub in sub_authors:
+            sub = re.sub(r"[\u4e00-\u9fff]+", " ", sub)
+            parts = [p for p in re.split(r"\s+", sub.strip()) if len(p) >= 2 and p.isalpha()]
+            if parts:
+                surnames.add(parts[-1].casefold())
+    return surnames
+
+
+def is_preprint_doi(doi: str | None) -> bool:
+    """Check if a DOI belongs to a known preprint server."""
+    if not doi:
+        return False
+    doi = doi.casefold().strip()
+    return any(doi.startswith(prefix) for prefix in [
+        "10.21203/",   # Research Square
+        "10.1101/",    # bioRxiv / medRxiv
+        "10.48550/",   # arXiv
+        "10.20944/",   # Preprints.org
+        "10.31219/",   # OSF Preprints
+        "10.26434/",   # ChemRxiv
+        "10.36227/",   # TechRxiv
+        "10.22541/",   # Authorea
+        "10.2139/",    # SSRN
+    ]) or "arxiv" in doi or "preprint" in doi or "/rs." in doi
 
 
 class MetadataHTMLParser(HTMLParser):
@@ -379,7 +418,7 @@ def work_candidates(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not left_key or not right_key:
             return
         ratio = SequenceMatcher(None, left_key, right_key).ratio()
-        if ratio >= 0.92:
+        if ratio >= 0.75:
             candidates.append(
                 {
                     "left_document_id": left["document_id"],
@@ -602,9 +641,9 @@ def ingest(
 
     records = records_without_hash + list(records_by_hash.values())
 
-    # Reconcile representations that share an exact normalized title unless
-    # they carry conflicting scholarly identifiers. Existing work IDs win so
-    # incremental ingestion never strands previously generated work records.
+    # Phase A: Reconcile representations that share an exact normalized title
+    # unless they carry conflicting scholarly identifiers.  Existing work IDs
+    # win so incremental ingestion never strands previously generated records.
     previous_hashes = set(previous)
     title_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
@@ -614,12 +653,78 @@ def ingest(
             continue
         dois = {str(record["doi"]).casefold() for record in representations if record.get("doi")}
         arxiv_ids = {str(record["arxiv_id"]).casefold() for record in representations if record.get("arxiv_id")}
-        if len(dois) > 1 or len(arxiv_ids) > 1:
+        non_preprint_dois = {d for d in dois if not is_preprint_doi(d)}
+        if len(non_preprint_dois) > 1 or len(arxiv_ids) > 1:
             continue
         existing_work_ids = [record["work_id"] for record in representations if record.get("sha256") in previous_hashes]
         canonical_work_id = existing_work_ids[0] if existing_work_ids else representations[0]["work_id"]
         for record in representations:
             record["work_id"] = canonical_work_id
+
+    # Phase B: Auto-merge near-duplicate titles using fuzzy matching + author
+    # overlap verification.  This catches preprint vs. journal pairs that have
+    # different DOIs and slight subtitle variations.
+    def _fuzzy_auto_merge(records: list[dict[str, Any]]) -> None:
+        """Union-find merge of records whose titles are similar AND share author surnames."""
+        n = len(records)
+        parent = list(range(n))
+
+        def find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: int, b: int) -> None:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        keys = [r.get("title_key") or title_key(r.get("title", "")) for r in records]
+        for i in range(n):
+            for j in range(i + 1, n):
+                if find(i) == find(j):
+                    continue
+                ki, kj = keys[i], keys[j]
+                if not ki or not kj:
+                    continue
+                ratio = SequenceMatcher(None, ki, kj).ratio()
+                if ratio < 0.75:
+                    continue
+                # Do not merge records that carry conflicting published journal DOIs or arXiv IDs.
+                # Preprint DOIs paired with published DOIs are expected for preprint/journal pairs.
+                doi_i = (records[i].get("doi") or "").casefold()
+                doi_j = (records[j].get("doi") or "").casefold()
+                if doi_i and doi_j and doi_i != doi_j:
+                    if not (is_preprint_doi(doi_i) or is_preprint_doi(doi_j)):
+                        continue
+                arxiv_i = (records[i].get("arxiv_id") or "").casefold()
+                arxiv_j = (records[j].get("arxiv_id") or "").casefold()
+                if arxiv_i and arxiv_j and arxiv_i != arxiv_j:
+                    continue
+                # Require at least one shared author surname (when both have authors)
+                left_names = author_surnames(records[i].get("authors") or [])
+                right_names = author_surnames(records[j].get("authors") or [])
+                if left_names and right_names and not (left_names & right_names):
+                    continue
+                union(i, j)
+
+        # Assign canonical work_id per group
+        groups: dict[int, list[int]] = defaultdict(list)
+        for i in range(n):
+            groups[find(i)].append(i)
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            existing = [
+                records[m]["work_id"] for m in members
+                if records[m].get("sha256") in previous_hashes
+            ]
+            canonical = existing[0] if existing else records[members[0]]["work_id"]
+            for m in members:
+                records[m]["work_id"] = canonical
+
+    _fuzzy_auto_merge(records)
 
     by_work: dict[str, list[dict[str, Any]]] = {}
     for record in records:

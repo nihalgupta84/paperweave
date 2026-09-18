@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2026-09-18
+
+- Add automated quality self-audit report (`synthesis/quality_report.md`) auditing
+  evidence coordinates, dataset hygiene, grouping consistency, and metric extraction.
+- Implement intelligent preprint and published journal auto-merging with Union-Find
+  clustering, subtitle stripping, Unicode author surname matching, and preprint DOI
+  recognition (allowing arXiv/bioRxiv/Research Square and journal versions to unify).
+- Prevent dataset false positives with expanded stopwords, section-title prefix
+  rejection, sentence-boundary guards, and spaced-acronym normalization.
+- Expand cross-domain metric taxonomy with 40+ benchmarks across Computer Vision,
+  NLP, Medical Imaging, Speech, and Generative Modeling, backed by strict token regex
+  and non-metric blocklists.
+- Deduplicate dataset benchmark synthesis by normalized name and add corpus-level
+  summary statistics to the navigation README.
+- Deduplicate work aggregate records in ingestion manifest to prevent duplicate entries.
+
 ## [0.3.0] - 2026-09-02
 
 - Replace the verbose run result with a concise human summary; retain full

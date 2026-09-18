@@ -11,6 +11,7 @@ from typing import Any
 from .hashing import sha256_file
 from .io import read_json, write_json
 from .manifest import load_manifest, now, save_manifest, update_stage
+from .quality_report import write_quality_report
 
 logger = logging.getLogger(__name__)
 
@@ -89,18 +90,38 @@ def write_experiments(corpus: Path, records: list[tuple[Any, ...]]) -> None:
 
 def write_datasets(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     """Generate datasets.md cross-paper usage index."""
-    usage: dict[str, list[tuple[Any, Any]]] = {}
+    # Collect usage, normalizing dataset names for deduplication
+    raw_usage: dict[str, list[tuple[Any, Any]]] = {}
+    display_names: dict[str, str] = {}  # canonical casefold key → best display name
     for work, _, experiments, taxonomy in records:
         for dataset in experiments.get("datasets", []):
-            usage.setdefault(dataset["name"], []).append((work, dataset))
+            key = dataset["name"].strip().casefold()
+            raw_usage.setdefault(key, []).append((work, dataset))
+            # Prefer the version with more uppercase (proper name)
+            if key not in display_names or sum(1 for c in dataset["name"] if c.isupper()) > sum(
+                1 for c in display_names[key] if c.isupper()
+            ):
+                display_names[key] = dataset["name"]
         for dataset in taxonomy.get("facets", {}).get("dataset", []):
-            usage.setdefault(dataset["name"], []).append((work, dataset))
+            key = dataset["name"].strip().casefold()
+            raw_usage.setdefault(key, []).append((work, dataset))
+            if key not in display_names:
+                display_names[key] = dataset["name"]
+
     lines = ["# Corpus Dataset Index", ""]
-    if not usage:
+    if not raw_usage:
         lines.append("No datasets were deterministically identified.")
-    for name, uses in sorted(usage.items()):
+    for key in sorted(raw_usage):
+        uses = raw_usage[key]
+        name = display_names.get(key, key)
         lines.extend([f"## {name}", ""])
+        # Deduplicate by work_id — don't repeat the same work for the same dataset
+        seen_works: set[str] = set()
         for work, dataset in uses:
+            wid = work.get("work_id", "")
+            if wid in seen_works:
+                continue
+            seen_works.add(wid)
             lines.append(f"- **{work['title']}**{evidence_suffix(dataset)}")
         lines.append("")
     (corpus / "synthesis" / "datasets.md").write_text("\n".join(lines), encoding="utf-8")
@@ -244,6 +265,7 @@ def synthesize_corpus(corpus: Path) -> dict[str, int]:
     write_review(corpus, records)
     write_references(corpus, records)
     write_all_papers(corpus, records)
+    write_quality_report(corpus, records)
     write_corpus_readme(corpus, records)
 
     manifest = load_manifest(corpus)
@@ -265,21 +287,43 @@ def synthesize_corpus(corpus: Path) -> dict[str, int]:
 
 
 def write_corpus_readme(corpus: Path, records: list[tuple[Any, ...]]) -> None:
-    """Write a short navigation page at the corpus root."""
+    """Write a navigation page at the corpus root with summary statistics."""
+    total_docs = sum(len(work.get("document_ids", [])) for work, _, _, _ in records)
+    datasets: set[str] = set()
+    metrics: set[str] = set()
+    for _, _, experiments, taxonomy in records:
+        for ds in experiments.get("datasets", []):
+            if ds.get("name"):
+                datasets.add(ds["name"].strip().casefold())
+        for ds in taxonomy.get("facets", {}).get("dataset", []):
+            if ds.get("name"):
+                datasets.add(ds["name"].strip().casefold())
+        for m in experiments.get("metrics", []):
+            if m.get("name"):
+                metrics.add(m["name"].strip())
+
     lines = [
-        "# PaperWeave corpus",
+        "# PaperWeave Corpus",
         "",
-        f"This corpus contains **{len(records)} scholarly works**.",
+        f"This corpus indexes **{len(records)} scholarly works** across **{total_docs} document representations**.",
         "",
-        "## Start here",
+        "## Corpus Statistics",
         "",
-        "- [Datasets](synthesis/datasets.md)",
-        "- [Methodology](synthesis/methodology.md)",
-        "- [Experiments and results](synthesis/experiments.md)",
-        "- [Literature review](synthesis/literature_review.md)",
-        "- [References](synthesis/references.md)",
-        "- [Combined paper text](synthesis/all_papers.md)",
-        "- [Paper graph](synthesis/citation_graph.md)",
+        f"- **Unique Works:** {len(records)}",
+        f"- **Document Representations:** {total_docs}",
+        f"- **Identified Datasets:** {len(datasets)}",
+        f"- **Extracted Metrics:** {len(metrics)}",
+        "",
+        "## Navigation & Synthesis Reports",
+        "",
+        "- [Datasets Index](synthesis/datasets.md) — Cross-paper dataset usage and benchmarking benchmarks",
+        "- [Methodology](synthesis/methodology.md) — Core problem statements, contributions, and component breakdowns",
+        "- [Experiments & Results](synthesis/experiments.md) — Quantitative metrics, results, and ablation studies",
+        "- [Literature Review](synthesis/literature_review.md) — Categorized state-of-the-art review and open challenges",
+        "- [References & Bibliography](synthesis/references.md) — Deterministically extracted bibliographic citations",
+        "- [Combined Paper Text](synthesis/all_papers.md) — Unified full text of all papers with preserved assets",
+        "- [Citation Graph](synthesis/citation_graph.md) — Cross-document citation and relationship graph",
+        "- [Quality Audit Report](synthesis/quality_report.md) — Automated audit of grouping, dataset hygiene, and evidence provenance",
         "",
         "`papers/` contains normalized individual documents. `collections/` contains generated topic views.",
         "The remaining directories store indexes, provenance, and reproducible machine-readable records.",
