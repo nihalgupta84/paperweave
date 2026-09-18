@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-09-18
+
+- Streamline `README.md` with interactive collapsible `<details>` dropdowns and dedicated setup guides for Google Drive rclone (`docs/setup_rclone.md`) and local Ollama (`docs/setup_ollama.md`).
+- Clarify evidence coordinate extraction with explicit framing of rectal cancer as an illustrative project corpus.
+- Apply `ruff format` across codebase and test suite to ensure 100% clean CI checks.
+
 ## [0.4.0] - 2026-09-18
 
 - Add automated quality self-audit report (`synthesis/quality_report.md`) auditing
