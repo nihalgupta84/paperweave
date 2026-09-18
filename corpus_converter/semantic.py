@@ -369,7 +369,6 @@ def analyze_document(
         method_blocks = select(blocks, {"abstract"}, 2)
     experiment_blocks = select(blocks, {"experiments", "datasets"}, 6)
     limitation_blocks = select(blocks, {"limitations", "discussion", "conclusion"}, 3)
-    entity_blocks = relevant_entity_blocks(blocks)
     found_datasets = discover_dataset_mentions(blocks, datasets)
     found_metrics, all_metric_names = discover_metric_mentions(blocks, metrics)
 

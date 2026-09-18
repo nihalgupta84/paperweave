@@ -12,14 +12,14 @@
 
 ### 💡 Why PaperWeave?
 
-Feeding raw academic PDFs directly to AI agents (Claude Computer Use, AutoGPT, LangChain, Cursor, ChatGPT, local LLMs) breaks down in practice:
+Feeding raw academic PDFs directly to AI agents (Claude, GPT, Gemini, Cursor, AutoGPT, local LLMs) breaks down in practice:
 
-1. 💸 **Token Explosion & Context Bloat**: A 25-paper reading list consumes **350,000+ tokens** of raw repetitive text, page headers, author affiliations, and boilerplate. It burns your API budget, triggers aggressive context truncation, and slows agent inference to a crawl.
-2. 🤥 **Rampant Numbers & Findings Hallucinations**: LLMs reading raw PDFs frequently scramble quantitative metrics, confuse ablation baselines with proposed contributions, or fabricate exact values (e.g. reporting a Dice score or BLEU metric that was actually an inferior baseline from 2019).
+1. 💸 **Token Explosion & Context Bloat**: 25 papers consume **350,000+ tokens** of raw repetitive boilerplate, header junk, and references. It burns API budgets, triggers truncation, and slows agent inference.
+2. 🤥 **Rampant Numbers & Findings Hallucinations**: LLMs reading raw PDFs easily scramble quantitative metrics, confuse ablation baselines with proposed contributions, or fabricate exact values.
 3. 🧩 **Multi-Column & Table Scrambling**: Traditional PDF converters scramble two-column layouts, break tabular benchmarks across lines, and mangle formulas into unreadable tokens.
 4. 🔄 **Preprint vs. Journal Duplicate Pollution**: Real-world paper collections contain both preprints (arXiv, bioRxiv, Research Square) and published journal versions (Nature, IEEE, Springer). Agents treat them as separate competing works, polluting citations and double-counting experiments.
 
-**PaperWeave solves this.** It parses, verifies, and normalizes entire paper libraries once into compact, structured Markdown and JSON. Every single claim, metric, and dataset is anchored to an immutable coordinate locator (`[document_id:block_id:page]`).
+**PaperWeave normalizes your papers once into compact, structured Markdown and JSON.** Every claim, metric, and dataset is anchored to an immutable coordinate locator (`[document_id:block_id:page]`).
 
 ```text
        📚 Raw Papers (PDF / DOCX / HTML / Google Drive)
@@ -63,64 +63,41 @@ Feeding raw academic PDFs directly to AI agents (Claude Computer Use, AutoGPT, L
 
 ## ⚡ Quick Start
 
-### 1. Installation
-
-Install PaperWeave with full PDF parsing support (recommended):
-
 ```bash
+# Install with full PDF parsing support
 python -m pip install "paperweave[full]"
-```
 
-*For lightweight DOCX/HTML text processing without PDF pipeline dependencies:*
-```bash
-python -m pip install paperweave
-```
-
-### 2. Run on Your Papers
-
-Run the complete end-to-end pipeline on any folder containing PDFs:
-
-```bash
+# Run complete end-to-end extraction on any folder of papers
 paperweave run ./papers
 ```
-
-PaperWeave automatically:
-1. Discovers, hashes, and deduplicates your files.
-2. Unifies preprints and published journal versions.
-3. Extracts clean text, tables, and bounding boxes via MinerU/native parsers.
-4. Identifies datasets, models, architectures, and metrics.
-5. Synthesizes agent-ready summaries with coordinate locators.
-6. Builds citation networks and heterogeneous knowledge graphs.
-7. Produces an automated **Quality Audit Report** (`synthesis/quality_report.md`).
 
 ---
 
 ## 🛡️ Zero-Hallucination Evidence Architecture
 
-How does PaperWeave guarantee that an AI agent never hallucinates numbers or paper findings?
-
 ### 1. Coordinate-Level Evidence Locators
-Every extracted fact, metric value, baseline comparison, and dataset usage is bound to an exact block ID and page number:
+Every extracted fact, quantitative metric, baseline comparison, and dataset usage is bound to an exact block ID and page number in the source PDF.
+
+*For example, in a medical imaging project on a rectal cancer corpus, evidence extraction works like this:*
 ```markdown
 - DICE score on rectal cancer segmentation reaches 89.4% [doc_a1b2:block_042:page_6]
 - SwinUNETR baseline achieves 83.2% mIoU under 5-fold cross-validation [doc_c3d4:block_019:page_4]
 ```
+*(The same coordinate precision applies equally across Computer Vision, NLP, Robotics, or Biology literature.)*
 
 ### 2. Strict Build-Time Audit
 During corpus synthesis, the pipeline validates every locator against the generated `blocks.jsonl` index. If an evidence reference points to a non-existent block or mismatched page, the pipeline flags the inconsistency immediately.
 
 ### 3. Automated Quality Self-Audit (`synthesis/quality_report.md`)
-Every synthesized corpus automatically includes a transparent health report detailing:
-- **Evidence Locator Validity**: Verification of 100% block and page coordinate existence.
+Every synthesized corpus automatically includes a transparent health report auditing:
+- **Evidence Locator Validity**: 100% verification rate of block and page coordinates.
 - **Dataset Hygiene**: Total discovered datasets and zero false positives (guards against running text or section headers).
 - **Grouping Health**: Verified single-work clusters and auto-merged preprint/journal editions.
-- **Metric Extraction Health**: Discovered quantitative metrics across all domain benchmarks.
+- **Metric Extraction Health**: Discovered quantitative metrics across domain benchmarks.
 
 ---
 
 ## 🔄 Intelligent Preprint & Journal Auto-Merging
-
-A major failure mode in research agents is finding an arXiv or bioRxiv preprint, downloading the published Nature or IEEE journal version months later, and reasoning over them as two distinct papers.
 
 PaperWeave v0.4 features an intelligent Union-Find merging engine:
 - **DOI Server Recognition**: Distinguishes preprint servers (arXiv, bioRxiv, medRxiv, Research Square, SSRN) from published journal DOIs (Nature, IEEE, Springer, Elsevier).
@@ -132,9 +109,8 @@ PaperWeave v0.4 features an intelligent Union-Find merging engine:
 
 ## 🌐 Domain-Agnostic Metric & Entity Discovery
 
-PaperWeave supports any scientific discipline without requiring domain retraining:
-
-- **Computer Vision & Medical Imaging**: `DSC` (Dice Similarity Coefficient), `HD95` (Hausdorff Distance 95%), `mIoU`, `ASD`, `NSD`, `mAP`, `Sensitivity`, `Specificity`.
+PaperWeave supports any scientific discipline out of the box:
+- **Computer Vision & Medical Imaging**: `DSC` (Dice Similarity Coefficient), `HD95`, `mIoU`, `ASD`, `NSD`, `mAP`, `Sensitivity`, `Specificity`.
 - **Natural Language Processing & LLMs**: `BLEU`, `ROUGE`, `METEOR`, `CIDEr`, `Perplexity`, `Exact Match`, `F1`.
 - **Speech & Audio**: `WER` (Word Error Rate), `CER`, `SDR`, `PESQ`.
 - **Generative AI & Synthesis**: `FID` (Fréchet Inception Distance), `IS` (Inception Score), `KID`.
@@ -147,14 +123,9 @@ PaperWeave supports any scientific discipline without requiring domain retrainin
 
 Point your AI agent (Claude, GPT, Gemini, or local models) directly at the generated `corpus/` folder:
 
-### Prompt 1: Grounded Hypothesis Creation
-> *"Examine `corpus/synthesis/methodology.md` and `corpus/synthesis/experiments.md`. What specific architectures and loss functions have been evaluated for [task]? What gaps exist in the current literature? Cite all paper claims using their exact `[doc:block:page]` locators."*
-
-### Prompt 2: Baseline & Experiment Planning
-> *"Read `corpus/synthesis/experiments.md` and `corpus/synthesis/datasets.md`. Tabulate the state-of-the-art results across each dataset, including evaluation metrics and reported baseline comparisons. Ensure all numbers cite their source block."*
-
-### Prompt 3: Drafting Related Work & LaTeX Bibliography
-> *"Draft a Related Work section synthesizing the themes in `corpus/synthesis/literature_review.md`. Use `corpus/synthesis/references.md` and `corpus/exports/` to generate exact BibTeX `\cite{...}` keys for our paper submission."*
+- **Hypothesis Creation**: *"Examine `corpus/synthesis/methodology.md` and `experiments.md`. What specific architectures and loss functions have been evaluated? What gaps exist in the current literature? Cite all claims using `[doc:block:page]`."*
+- **Baseline Planning**: *"Read `corpus/synthesis/experiments.md` and `datasets.md`. Tabulate the state-of-the-art results across each dataset, including evaluation metrics and reported baseline comparisons."*
+- **Related Work Drafting**: *"Draft a Related Work section synthesizing the themes in `corpus/synthesis/literature_review.md`. Use `corpus/synthesis/references.md` to generate exact BibTeX `\cite{...}` keys."*
 
 ---
 
@@ -192,33 +163,46 @@ corpus/
 
 ## ☁️ Google Drive & Cloud Ingestion (via rclone)
 
-Have all your papers organized in Google Drive? PaperWeave natively pulls, deduplicates, and stages your entire cloud folder:
+Ingest papers directly from Google Drive without manual downloads:
 
 ```bash
-# Ingest directly from a Google Drive folder via your configured rclone remote
 paperweave run "https://drive.google.com/drive/folders/FOLDER_ID" --remote mydrive
 ```
 
-Files are safely hashed, renamed, and deduplicated before extraction without modifying your remote files.
+<details>
+<summary><b>⚙️ How to configure Google Drive & rclone</b> (click to expand)</summary>
+
+1. Install rclone: `curl https://rclone.org/install.sh | sudo bash`
+2. Run `rclone config` to link your Google Drive account under a remote name (e.g., `mydrive`).
+3. Verify connection: `rclone lsd mydrive:`
+
+📖 Read the complete guide: [docs/setup_rclone.md](docs/setup_rclone.md)
+</details>
 
 ---
 
 ## 🔒 100% Local & Offline First
 
-PaperWeave works completely offline with zero mandatory API keys:
+PaperWeave runs completely offline with zero mandatory API keys:
 
-* **Automatic Local Selection**: If Ollama and `llm-checker` are installed, PaperWeave ranks and selects the best model currently installed on your hardware:
-  ```bash
-  paperweave run papers --semantic-provider auto
-  ```
-* **Specific Local Model**:
-  ```bash
-  paperweave run papers --semantic-provider ollama --model qwen2.5:7b
-  ```
-* **Pure Deterministic Mode** (No GPU / No LLM required):
-  ```bash
-  paperweave run papers --semantic-provider deterministic
-  ```
+```bash
+# Automatic local model ranking & execution
+paperweave run ./papers --semantic-provider auto
+
+# Or pure deterministic mode (zero GPU / zero LLM required)
+paperweave run ./papers --semantic-provider deterministic
+```
+
+<details>
+<summary><b>🦙 How to configure Ollama & llm-checker</b> (click to expand)</summary>
+
+1. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
+2. Pull a recommended model: `ollama pull qwen2.5:7b` (or `llama3.1:8b`)
+3. Install model ranker: `python -m pip install llm-checker`
+4. Verify local hardware capabilities: `paperweave capabilities`
+
+📖 Read the complete guide: [docs/setup_ollama.md](docs/setup_ollama.md)
+</details>
 
 ---
 
@@ -227,7 +211,7 @@ PaperWeave works completely offline with zero mandatory API keys:
 Search across thousands of document blocks using combined exact full-text (SQLite FTS5) and sparse lexical-vector ranking without external vector databases:
 
 ```bash
-paperweave search --corpus corpus "contrastive learning rectal cancer MRI"
+paperweave search --corpus corpus "transformer self-attention segmentation loss"
 ```
 
 ---

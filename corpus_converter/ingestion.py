@@ -692,12 +692,15 @@ def ingest(
                 if ratio < 0.75:
                     continue
                 # Do not merge records that carry conflicting published journal DOIs or arXiv IDs.
-                # Preprint DOIs paired with published DOIs are expected for preprint/journal pairs.
                 doi_i = (records[i].get("doi") or "").casefold()
                 doi_j = (records[j].get("doi") or "").casefold()
-                if doi_i and doi_j and doi_i != doi_j:
-                    if not (is_preprint_doi(doi_i) or is_preprint_doi(doi_j)):
-                        continue
+                if (
+                    doi_i
+                    and doi_j
+                    and doi_i != doi_j
+                    and not (is_preprint_doi(doi_i) or is_preprint_doi(doi_j))
+                ):
+                    continue
                 arxiv_i = (records[i].get("arxiv_id") or "").casefold()
                 arxiv_j = (records[j].get("arxiv_id") or "").casefold()
                 if arxiv_i and arxiv_j and arxiv_i != arxiv_j:

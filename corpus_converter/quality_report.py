@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .io import read_json, read_jsonl
+from .io import read_jsonl
 from .semantic import DATASET_FALSE_POSITIVES, DATASET_STOPWORDS, validate_evidence
 
 logger = logging.getLogger(__name__)

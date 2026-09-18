@@ -8,15 +8,13 @@ from pathlib import Path
 
 from corpus_converter.ingestion import author_surnames, title_key
 from corpus_converter.io import read_json, write_json, write_jsonl
-from corpus_converter.quality_report import generate_quality_report, write_quality_report
+from corpus_converter.quality_report import write_quality_report
 from corpus_converter.semantic import (
-    DATASET_FALSE_POSITIVES,
-    DATASET_STOPWORDS,
     _clean_dataset_candidate,
     discover_metric_mentions,
     rebuild_work_aggregates,
 )
-from corpus_converter.synthesis import synthesize_corpus, write_datasets
+from corpus_converter.synthesis import write_datasets
 
 
 class GeneralizationPhaseOneTests(unittest.TestCase):
