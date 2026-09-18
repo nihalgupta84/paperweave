@@ -128,23 +128,29 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
     ]
 
     # Grouping Section
-    lines.extend([
-        "## 1. Grouping & Document Deduplication Audit",
-        "",
-        f"- **Multi-document works ({len(multi_doc_works)}):**",
-    ])
+    lines.extend(
+        [
+            "## 1. Grouping & Document Deduplication Audit",
+            "",
+            f"- **Multi-document works ({len(multi_doc_works)}):**",
+        ]
+    )
     if multi_doc_works:
         for w in multi_doc_works:
-            lines.append(f"  - **{w.get('title', 'Untitled')}** (`{w.get('work_id')}`): {len(w.get('document_ids', []))} documents merged")
+            lines.append(
+                f"  - **{w.get('title', 'Untitled')}** (`{w.get('work_id')}`): {len(w.get('document_ids', []))} documents merged"
+            )
     else:
         lines.append("  - None (each work consists of a single document representation).")
     lines.append("")
 
     if unmerged_candidates:
-        lines.extend([
-            f"- **Unmerged Title Candidate Pairs ({len(unmerged_candidates)}):**",
-            "  *The following pairs share title similarity but were kept as distinct works (e.g. distinct DOIs or insufficient author overlap):*",
-        ])
+        lines.extend(
+            [
+                f"- **Unmerged Title Candidate Pairs ({len(unmerged_candidates)}):**",
+                "  *The following pairs share title similarity but were kept as distinct works (e.g. distinct DOIs or insufficient author overlap):*",
+            ]
+        )
         for c in unmerged_candidates[:15]:
             lines.append(
                 f"  - `{c.get('left_document_id')}` vs `{c.get('right_document_id')}` "
@@ -157,30 +163,38 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
     lines.append("")
 
     # Dataset Section
-    lines.extend([
-        "## 2. Dataset Mention Hygiene Audit",
-        "",
-        f"Total unique datasets found across the corpus: **{len(all_datasets)}**.",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 2. Dataset Mention Hygiene Audit",
+            "",
+            f"Total unique datasets found across the corpus: **{len(all_datasets)}**.",
+            "",
+        ]
+    )
     if suspicious_datasets:
         lines.append("### Flagged Suspicious Mentions")
         lines.append("")
         for item in suspicious_datasets:
-            lines.append(f"- **`{item['name']}`**: {', '.join(item['reasons'])} *(cited in: {', '.join(item['works'][:3])})*")
+            lines.append(
+                f"- **`{item['name']}`**: {', '.join(item['reasons'])} *(cited in: {', '.join(item['works'][:3])})*"
+            )
         lines.append("")
     else:
-        lines.append("No suspicious dataset names detected. All candidates passed stopword, boundary, and entity validation.")
+        lines.append(
+            "No suspicious dataset names detected. All candidates passed stopword, boundary, and entity validation."
+        )
         lines.append("")
 
     # Metrics Section
-    lines.extend([
-        "## 3. Quantitative Metric & Result Coverage",
-        "",
-        f"- Works with extracted metrics: **{works_with_metrics}/{total_works}**",
-        f"- Works with quantitative result statements: **{works_with_results}/{total_works}**",
-        f"- Total metric entity mentions: **{total_metrics_found}** ({len(all_metric_names)} distinct metrics)",
-    ])
+    lines.extend(
+        [
+            "## 3. Quantitative Metric & Result Coverage",
+            "",
+            f"- Works with extracted metrics: **{works_with_metrics}/{total_works}**",
+            f"- Works with quantitative result statements: **{works_with_results}/{total_works}**",
+            f"- Total metric entity mentions: **{total_metrics_found}** ({len(all_metric_names)} distinct metrics)",
+        ]
+    )
     if all_metric_names:
         sample_metrics = sorted(all_metric_names)[:20]
         lines.append(f"- Identified metrics include: {', '.join(f'`{m}`' for m in sample_metrics)}")
@@ -194,24 +208,30 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
     lines.append("")
 
     # Evidence Integrity Section
-    lines.extend([
-        "## 4. Evidence Integrity & Grounding Audit",
-        "",
-        f"- **Valid evidence locators:** {valid_ev}",
-        f"- **Invalid evidence locators:** {invalid_ev}",
-        f"- **Provenance resolution rate:** {ev_rate:.1f}%",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 4. Evidence Integrity & Grounding Audit",
+            "",
+            f"- **Valid evidence locators:** {valid_ev}",
+            f"- **Invalid evidence locators:** {invalid_ev}",
+            f"- **Provenance resolution rate:** {ev_rate:.1f}%",
+            "",
+        ]
+    )
     if invalid_ev > 0:
         lines.append("> [!WARNING]")
-        lines.append(f"> {invalid_ev} evidence locators could not be resolved to valid document blocks. Run `paperweave analyze --force` to re-ground.")
+        lines.append(
+            f"> {invalid_ev} evidence locators could not be resolved to valid document blocks. Run `paperweave analyze --force` to re-ground."
+        )
         lines.append("")
 
     # Extraction Modes Section
-    lines.extend([
-        "## 5. Extraction Mode Breakdown",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 5. Extraction Mode Breakdown",
+            "",
+        ]
+    )
     for mode, count in sorted(mode_counts.items()):
         lines.append(f"- `{mode}`: {count} work(s)")
     lines.append("")

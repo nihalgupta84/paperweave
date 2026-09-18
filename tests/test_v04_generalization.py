@@ -93,7 +93,9 @@ class GeneralizationPhaseTwoTests(unittest.TestCase):
                 "work_id": work_id,
                 "document_id": doc1_id,
                 "extraction_mode": "deterministic_extractive",
-                "research_problem": [{"statement": "Accurate rectal segmentation.", "support_status": "supported", "evidence": [ev1]}],
+                "research_problem": [
+                    {"statement": "Accurate rectal segmentation.", "support_status": "supported", "evidence": [ev1]}
+                ],
                 "methodology": [],
                 "contributions": [{"statement": "Proposed U-SAM.", "support_status": "supported", "evidence": [ev2]}],
                 "method_components": [],
@@ -107,7 +109,11 @@ class GeneralizationPhaseTwoTests(unittest.TestCase):
                 "document_id": doc2_id,
                 "extraction_mode": "deterministic_extractive",
                 "research_problem": [
-                    {"statement": "Accurate rectal segmentation.", "support_status": "supported", "evidence": [ev1, ev3]}
+                    {
+                        "statement": "Accurate rectal segmentation.",
+                        "support_status": "supported",
+                        "evidence": [ev1, ev3],
+                    }
                 ],
                 "methodology": [],
                 "contributions": [{"statement": "Proposed U-SAM.", "support_status": "supported", "evidence": [ev2]}],
@@ -245,7 +251,12 @@ class GeneralizationPhaseFiveTests(unittest.TestCase):
             }
             experiments = {
                 "metrics": [{"name": "DSC"}],
-                "results": [{"statement": "Achieved DSC of 0.89.", "evidence": [{"document_id": doc_id, "block_id": "b1", "page_index": 0}]}],
+                "results": [
+                    {
+                        "statement": "Achieved DSC of 0.89.",
+                        "evidence": [{"document_id": doc_id, "block_id": "b1", "page_index": 0}],
+                    }
+                ],
                 "datasets": [{"name": "WORD"}],
             }
             taxonomy = {"facets": {}}

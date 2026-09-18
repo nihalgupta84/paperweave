@@ -66,23 +66,77 @@ DATASET_STOPWORDS = {
 # legitimate standalone dataset names.  Checked via casefold().
 DATASET_FALSE_POSITIVES = {
     # Demonstratives / conjunctions / adverbs
-    "although", "because", "besides", "consequently", "furthermore",
-    "however", "moreover", "nevertheless", "nonetheless", "notably",
-    "notable", "particularly", "respectively", "similarly", "specifically",
-    "such", "that", "therefore", "these", "this", "those", "thus",
-    "additionally", "alternatively", "conversely", "including",
-    "meanwhile", "otherwise", "subsequently", "whereas",
+    "although",
+    "because",
+    "besides",
+    "consequently",
+    "furthermore",
+    "however",
+    "moreover",
+    "nevertheless",
+    "nonetheless",
+    "notably",
+    "notable",
+    "particularly",
+    "respectively",
+    "similarly",
+    "specifically",
+    "such",
+    "that",
+    "therefore",
+    "these",
+    "this",
+    "those",
+    "thus",
+    "additionally",
+    "alternatively",
+    "conversely",
+    "including",
+    "meanwhile",
+    "otherwise",
+    "subsequently",
+    "whereas",
     # Imaging modalities — never a dataset by themselves
-    "ct", "mri", "pet", "spect", "xray", "x-ray", "ultrasound",
-    "histology", "endoscopy", "fluoroscopy", "mammography", "oct",
-    "dermoscopy", "fundoscopy", "ecg", "eeg",
+    "ct",
+    "mri",
+    "pet",
+    "spect",
+    "xray",
+    "x-ray",
+    "ultrasound",
+    "histology",
+    "endoscopy",
+    "fluoroscopy",
+    "mammography",
+    "oct",
+    "dermoscopy",
+    "fundoscopy",
+    "ecg",
+    "eeg",
     # Anatomy / clinical terms that appear near "dataset" but are not names
-    "abdominal", "cardiac", "cerebral", "cervical", "colorectal",
-    "hepatic", "lung", "pancreatic", "prostate", "rectal", "renal",
-    "retinal", "thoracic",
+    "abdominal",
+    "cardiac",
+    "cerebral",
+    "cervical",
+    "colorectal",
+    "hepatic",
+    "lung",
+    "pancreatic",
+    "prostate",
+    "rectal",
+    "renal",
+    "retinal",
+    "thoracic",
     # Generic qualifiers
-    "clinical", "large scale", "large-scale", "medical", "multicenter",
-    "multicentre", "prospective", "retrospective", "single-center",
+    "clinical",
+    "large scale",
+    "large-scale",
+    "medical",
+    "multicenter",
+    "multicentre",
+    "prospective",
+    "retrospective",
+    "single-center",
     "single-centre",
 }
 
@@ -225,7 +279,8 @@ def _clean_dataset_candidate(value: str) -> str | None:
         r"^(?:construction|description|overview|analysis|evaluation|"
         r"comparison|application|introduction|utilization|collection|"
         r"preparation|annotation|curation|summary|details)\b",
-        value, re.I,
+        value,
+        re.I,
     ):
         return None
 
@@ -276,7 +331,8 @@ def discover_metric_mentions(
     Returns found metric dicts and a set of all metric names (configured + discovered).
     """
     relevant = [
-        block for block in blocks
+        block
+        for block in blocks
         if block.get("section_role") in {"results", "experiments", "datasets", "abstract", "methodology"}
         and block.get("type") not in {"header", "footer", "page_number", "page_footnote"}
         and block.get("text", "").strip()
@@ -300,17 +356,81 @@ def discover_metric_mentions(
     ]
     # Ignore abbreviations that are almost never metric names
     metric_blocklist = {
-        "TABLE", "FIG", "FIGURE", "REF", "EQ", "SEC", "SECTION",
-        "VOL", "NO", "PP", "ET", "AL", "IEEE", "ACM", "MICCAI",
-        "CVPR", "ICCV", "ECCV", "NIPS", "ICML", "AAAI", "ARXIV",
-        "GPU", "CPU", "RAM", "GAN", "CNN", "RNN", "SAM", "BERT",
-        "ADAM", "SGD", "LR", "BS", "BN", "ReLU",
+        "TABLE",
+        "FIG",
+        "FIGURE",
+        "REF",
+        "EQ",
+        "SEC",
+        "SECTION",
+        "VOL",
+        "NO",
+        "PP",
+        "ET",
+        "AL",
+        "IEEE",
+        "ACM",
+        "MICCAI",
+        "CVPR",
+        "ICCV",
+        "ECCV",
+        "NIPS",
+        "ICML",
+        "AAAI",
+        "ARXIV",
+        "GPU",
+        "CPU",
+        "RAM",
+        "GAN",
+        "CNN",
+        "RNN",
+        "SAM",
+        "BERT",
+        "ADAM",
+        "SGD",
+        "LR",
+        "BS",
+        "BN",
+        "ReLU",
         # Modalities / Medical / Non-metric abbreviations
-        "CT", "MRI", "PET", "US", "CI", "DL", "ML", "AI", "ID",
-        "TOTAL", "SAMPLE", "PATIENT", "STUDY", "CLASS", "GROUP",
-        "VERSION", "STAGE", "PHASE", "TYPE", "CASE", "CASES",
-        "ROI", "VOI", "GT", "HU", "FOV", "TE", "TR", "SD", "SE",
-        "NVIDIA", "INTEL", "AMD", "GB", "MB", "KB", "TB", "WORD",
+        "CT",
+        "MRI",
+        "PET",
+        "US",
+        "CI",
+        "DL",
+        "ML",
+        "AI",
+        "ID",
+        "TOTAL",
+        "SAMPLE",
+        "PATIENT",
+        "STUDY",
+        "CLASS",
+        "GROUP",
+        "VERSION",
+        "STAGE",
+        "PHASE",
+        "TYPE",
+        "CASE",
+        "CASES",
+        "ROI",
+        "VOI",
+        "GT",
+        "HU",
+        "FOV",
+        "TE",
+        "TR",
+        "SD",
+        "SE",
+        "NVIDIA",
+        "INTEL",
+        "AMD",
+        "GB",
+        "MB",
+        "KB",
+        "TB",
+        "WORD",
     }
 
     for block in relevant:
@@ -467,9 +587,7 @@ def rebuild_work_aggregates(record_dir: Path, work: dict[str, Any]) -> None:
         return list(seen.values())
 
     for field in analysis_fields:
-        aggregate_analysis[field] = _dedup_items(
-            [item for value in analyses for item in value.get(field, [])]
-        )
+        aggregate_analysis[field] = _dedup_items([item for value in analyses for item in value.get(field, [])])
 
     experiment_fields = (
         "datasets",

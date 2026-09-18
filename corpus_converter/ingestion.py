@@ -86,17 +86,25 @@ def is_preprint_doi(doi: str | None) -> bool:
     if not doi:
         return False
     doi = doi.casefold().strip()
-    return any(doi.startswith(prefix) for prefix in [
-        "10.21203/",   # Research Square
-        "10.1101/",    # bioRxiv / medRxiv
-        "10.48550/",   # arXiv
-        "10.20944/",   # Preprints.org
-        "10.31219/",   # OSF Preprints
-        "10.26434/",   # ChemRxiv
-        "10.36227/",   # TechRxiv
-        "10.22541/",   # Authorea
-        "10.2139/",    # SSRN
-    ]) or "arxiv" in doi or "preprint" in doi or "/rs." in doi
+    return (
+        any(
+            doi.startswith(prefix)
+            for prefix in [
+                "10.21203/",  # Research Square
+                "10.1101/",  # bioRxiv / medRxiv
+                "10.48550/",  # arXiv
+                "10.20944/",  # Preprints.org
+                "10.31219/",  # OSF Preprints
+                "10.26434/",  # ChemRxiv
+                "10.36227/",  # TechRxiv
+                "10.22541/",  # Authorea
+                "10.2139/",  # SSRN
+            ]
+        )
+        or "arxiv" in doi
+        or "preprint" in doi
+        or "/rs." in doi
+    )
 
 
 class MetadataHTMLParser(HTMLParser):
@@ -694,12 +702,7 @@ def ingest(
                 # Do not merge records that carry conflicting published journal DOIs or arXiv IDs.
                 doi_i = (records[i].get("doi") or "").casefold()
                 doi_j = (records[j].get("doi") or "").casefold()
-                if (
-                    doi_i
-                    and doi_j
-                    and doi_i != doi_j
-                    and not (is_preprint_doi(doi_i) or is_preprint_doi(doi_j))
-                ):
+                if doi_i and doi_j and doi_i != doi_j and not (is_preprint_doi(doi_i) or is_preprint_doi(doi_j)):
                     continue
                 arxiv_i = (records[i].get("arxiv_id") or "").casefold()
                 arxiv_j = (records[j].get("arxiv_id") or "").casefold()
@@ -719,10 +722,7 @@ def ingest(
         for members in groups.values():
             if len(members) < 2:
                 continue
-            existing = [
-                records[m]["work_id"] for m in members
-                if records[m].get("sha256") in previous_hashes
-            ]
+            existing = [records[m]["work_id"] for m in members if records[m].get("sha256") in previous_hashes]
             canonical = existing[0] if existing else records[members[0]]["work_id"]
             for m in members:
                 records[m]["work_id"] = canonical
