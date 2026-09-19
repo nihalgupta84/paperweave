@@ -390,6 +390,27 @@ DATASET_FALSE_POSITIVES = {
     "affordance",
     "detection",
     "segmentation",
+    "cohort",
+    "cohorts",
+    "participant",
+    "participants",
+    "interview",
+    "interviews",
+    "interviewee",
+    "interviewees",
+    "implementer",
+    "implementers",
+    "user",
+    "users",
+    "patient",
+    "patients",
+    "partogram",
+    "partograms",
+    "clinical implementers",
+    "healthcare end users",
+    "data cohort",
+    "all interviewees",
+    "all participants",
 }
 
 CANONICAL_DATASET_MAP: dict[str, str] = {
@@ -450,6 +471,39 @@ CANONICAL_DATASET_MAP: dict[str, str] = {
     "layereddepth-syn": "LayeredDepth-Syn",
     "tartanair": "TartanAir",
     "mvtrans": "MVTrans",
+    "mimic": "MIMIC",
+    "mimic-iii": "MIMIC-III",
+    "mimic-iv": "MIMIC-IV",
+    "mimic-cxr": "MIMIC-CXR",
+    "mimic-cxr-jpg": "MIMIC-CXR",
+    "medqa": "MedQA",
+    "medmcqa": "MedMCQA",
+    "pubmedqa": "PubMedQA",
+    "automedbench": "AutoMedBench",
+    "medchain": "MedChain",
+    "meddg": "MedDG",
+    "pathvqa": "PathVQA",
+    "bioasq": "BioASQ",
+    "hle": "HLE",
+    "hle-biomed": "HLE",
+    "charite": "Charité",
+    "charité": "Charité",
+    "german charité": "Charité",
+    "german charite": "Charité",
+    "medmaslab": "MedMASLab",
+    "decentmem": "DecentMem",
+    "medagentbench": "MedAgentBench",
+    "medagentsbench": "MedAgentBench",
+    "ddxbench": "DDxBench",
+    "fhir-agentbench": "FHIR-AgentBench",
+    "agentclinic": "AgentClinic",
+    "medbullets": "MedBullets",
+    "alfworld": "ALFWorld",
+    "bbh": "BBH",
+    "mbpp-plus": "MBPP-Plus",
+    "synthea": "Synthea",
+    "open-source simulator synthea": "Synthea",
+    "synthea simulator": "Synthea",
 }
 
 
@@ -625,6 +679,10 @@ def _clean_dataset_candidate(value: str) -> str | None:
 
     value = " ".join(words)
 
+    # If already a known canonical dataset, return it immediately
+    if value.casefold() in CANONICAL_DATASET_MAP:
+        return CANONICAL_DATASET_MAP[value.casefold()]
+
     # Reject empty, too long, too many words
     if not value or len(value) > 60 or len(words) > 4:
         return None
@@ -645,12 +703,28 @@ def _clean_dataset_candidate(value: str) -> str | None:
     ):
         return None
 
+    # Reject table, figure, equation, appendix, and section markers (e.g. Table A3, Figure 2)
+    if re.match(r"^(?:Table|Fig|Figure|Section|Sec|Appendix|Eq|Equation)\b", value, re.I):
+        return None
+
+    # Reject time intervals and temporal periods (e.g. 10-month period)
+    if re.search(r"\b(?:month|months|year|years|day|days|week|weeks|hour|hours|period|duration)\b", value, re.I):
+        return None
+
+    # Reject metrics and performance indicators accidentally captured as datasets (e.g. AUROC and F1-Score)
+    if re.search(r"\b(?:auroc|f1|accuracy|precision|recall|specificity|sensitivity|metric|metrics|score|scores)\b", value, re.I):
+        return None
+
+    # Reject patient/cohort counts and clinical subject phrases (e.g. partograms from250patients)
+    if re.search(r"\b(?:patient|patients|subject|subjects|case|cases|participant|participants|partograms?)\b", value, re.I):
+        return None
+
     # Reject single letters, short abbreviations without digits, section numbering (e.g. C.1, A2b, I, D)
     if len(value) <= 2 and not re.search(r"\d", value):
         return None
     if (
         re.match(r"^[A-Z]\.?$", value)
-        or re.match(r"^[ivxlcdm]+\.?$", value, re.I)
+        or (re.match(r"^[ivx]+\.?$", value, re.I) and len(value) <= 4)
         or re.match(r"^[a-z]?\d+[a-z]?\.?$", value, re.I)
         or re.match(r"^[A-Z]\.\d+\b", value)
         or re.match(r"^Q\d+\b", value, re.I)
@@ -706,6 +780,234 @@ def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[st
     return list(found.values())
 
 
+METRIC_BLOCKLIST: set[str] = {
+    "TABLE",
+    "FIG",
+    "FIGURE",
+    "REF",
+    "EQ",
+    "SEC",
+    "SECTION",
+    "VOL",
+    "NO",
+    "PP",
+    "ET",
+    "AL",
+    "IEEE",
+    "ACM",
+    "MICCAI",
+    "CVPR",
+    "ICCV",
+    "ECCV",
+    "NIPS",
+    "ICML",
+    "AAAI",
+    "ARXIV",
+    "GPU",
+    "CPU",
+    "RAM",
+    "GAN",
+    "CNN",
+    "RNN",
+    "SAM",
+    "BERT",
+    "ADAM",
+    "SGD",
+    "LR",
+    "BS",
+    "BN",
+    "ReLU",
+    # Modalities / Medical / Non-metric abbreviations
+    "CT",
+    "MRI",
+    "PET",
+    "US",
+    "CI",
+    "DL",
+    "ML",
+    "AI",
+    "ID",
+    "TOTAL",
+    "SAMPLE",
+    "PATIENT",
+    "STUDY",
+    "CLASS",
+    "GROUP",
+    "VERSION",
+    "STAGE",
+    "PHASE",
+    "TYPE",
+    "CASE",
+    "CASES",
+    "ROI",
+    "VOI",
+    "GT",
+    "HU",
+    "FOV",
+    "TE",
+    "TR",
+    "SD",
+    "SE",
+    "NVIDIA",
+    "INTEL",
+    "AMD",
+    "GB",
+    "MB",
+    "KB",
+    "IS",
+    "LLM",
+    "LLMS",
+    "VLM",
+    "EHR",
+    "FHIR",
+    "IRB",
+    "ICH",
+    "WSI",
+    "MIOT",
+    "API",
+    "URL",
+    "JSON",
+    "PII",
+    "GPT",
+    "COT",
+    "VCOT",
+    "HLE",
+    "TB",
+    "WORD",
+    # English stopwords, verbs, and pronouns that should never be metric names
+    "A",
+    "AN",
+    "THE",
+    "IN",
+    "ON",
+    "AT",
+    "BY",
+    "FOR",
+    "WITH",
+    "ABOUT",
+    "AGAINST",
+    "BETWEEN",
+    "INTO",
+    "THROUGH",
+    "DURING",
+    "BEFORE",
+    "AFTER",
+    "ABOVE",
+    "BELOW",
+    "TO",
+    "FROM",
+    "UP",
+    "DOWN",
+    "OUT",
+    "OFF",
+    "OVER",
+    "UNDER",
+    "AGAIN",
+    "FURTHER",
+    "THEN",
+    "ONCE",
+    "HERE",
+    "THERE",
+    "WHEN",
+    "WHERE",
+    "WHY",
+    "HOW",
+    "ALL",
+    "ANY",
+    "BOTH",
+    "EACH",
+    "FEW",
+    "MORE",
+    "MOST",
+    "OTHER",
+    "SOME",
+    "SUCH",
+    "NOR",
+    "NOT",
+    "ONLY",
+    "OWN",
+    "SAME",
+    "SO",
+    "THAN",
+    "TOO",
+    "VERY",
+    "CAN",
+    "WILL",
+    "JUST",
+    "DON",
+    "SHOULD",
+    "NOW",
+    "AM",
+    "IS",
+    "ARE",
+    "WAS",
+    "WERE",
+    "BE",
+    "BEEN",
+    "BEING",
+    "HAVE",
+    "HAS",
+    "HAD",
+    "DO",
+    "DOES",
+    "DID",
+    "DOING",
+    "WE",
+    "OUR",
+    "OURS",
+    "YOU",
+    "YOUR",
+    "THEY",
+    "THEIR",
+    "IT",
+    "ITS",
+    "HE",
+    "SHE",
+    "HIM",
+    "HER",
+    "THIS",
+    "THAT",
+    "THESE",
+    "THOSE",
+    "USE",
+    "USED",
+    "USING",
+    "TEST",
+    "TESTED",
+    "EVAL",
+    "EVALUATED",
+    "RESULT",
+    "RESULTS",
+    "TASK",
+    "TASKS",
+    "DATA",
+    "MODEL",
+    "MODELS",
+    "METHOD",
+    "METHODS",
+    "SCORE",
+    "SCORES",
+    "BASELINE",
+    "PROPOSED",
+    "APPROACH",
+    "SYSTEM",
+    "PERFORMANCE",
+    "AVERAGE",
+    "AVG",
+    "MAX",
+    "MIN",
+    "MEAN",
+    "MEDIAN",
+    "COUNT",
+    "SUM",
+    "RATE",
+    "RATIO",
+    "PERCENT",
+    "VALUE",
+    "VALUES",
+}
+
+
 def discover_metric_mentions(
     blocks: list[dict[str, Any]], configured: tuple[str, ...]
 ) -> tuple[list[dict[str, Any]], set[str]]:
@@ -737,84 +1039,6 @@ def discover_metric_mentions(
         # Parenthetical "(METRIC: 0.95)" or "(METRIC = 0.95)"
         re.compile(rf"\(\s*({metric_token})\s*[:=]\s*\d+\.?\d*\)"),
     ]
-    # Ignore abbreviations that are almost never metric names
-    metric_blocklist = {
-        "TABLE",
-        "FIG",
-        "FIGURE",
-        "REF",
-        "EQ",
-        "SEC",
-        "SECTION",
-        "VOL",
-        "NO",
-        "PP",
-        "ET",
-        "AL",
-        "IEEE",
-        "ACM",
-        "MICCAI",
-        "CVPR",
-        "ICCV",
-        "ECCV",
-        "NIPS",
-        "ICML",
-        "AAAI",
-        "ARXIV",
-        "GPU",
-        "CPU",
-        "RAM",
-        "GAN",
-        "CNN",
-        "RNN",
-        "SAM",
-        "BERT",
-        "ADAM",
-        "SGD",
-        "LR",
-        "BS",
-        "BN",
-        "ReLU",
-        # Modalities / Medical / Non-metric abbreviations
-        "CT",
-        "MRI",
-        "PET",
-        "US",
-        "CI",
-        "DL",
-        "ML",
-        "AI",
-        "ID",
-        "TOTAL",
-        "SAMPLE",
-        "PATIENT",
-        "STUDY",
-        "CLASS",
-        "GROUP",
-        "VERSION",
-        "STAGE",
-        "PHASE",
-        "TYPE",
-        "CASE",
-        "CASES",
-        "ROI",
-        "VOI",
-        "GT",
-        "HU",
-        "FOV",
-        "TE",
-        "TR",
-        "SD",
-        "SE",
-        "NVIDIA",
-        "INTEL",
-        "AMD",
-        "GB",
-        "MB",
-        "KB",
-        "TB",
-        "WORD",
-    }
 
     for block in relevant:
         text = block.get("text", "")
@@ -822,7 +1046,7 @@ def discover_metric_mentions(
             for match in pattern.finditer(text):
                 name = match.group(1)
                 key = name.casefold()
-                if key not in found and name.upper() not in metric_blocklist and len(name) >= 2:
+                if key not in found and name.upper() not in METRIC_BLOCKLIST and len(name) >= 2:
                     found[key] = {"name": name, "evidence": [evidence(block)]}
                     all_names.add(key)
 
@@ -1126,21 +1350,162 @@ def enrich_document(paper_dir: Path, corpus: Path, provider: Any) -> tuple[bool,
         if values:
             analysis[field] = values
 
-    for field in ("datasets", "metrics"):
-        values = block_cited(generated.get(field, []))
-        if values:
-            experiments[field] = [
-                {
-                    "name": item["statement"],
-                    "evidence": item["evidence"],
-                    "support_status": "evidence_cited_unverified",
-                }
-                for item in values
-            ]
+    extra_results: list[dict[str, Any]] = []
 
+    # 1. Clean dataset entity extraction
+    raw_datasets = block_cited(generated.get("datasets", []))
+    if raw_datasets:
+        clean_datasets: list[dict[str, Any]] = []
+        seen_ds: set[str] = set()
+        for item in raw_datasets:
+            stmt = re.sub(r"\[BLOCK_ID=[^]]+\]", "", item["statement"]).strip()
+            cleaned = _clean_dataset_candidate(stmt)
+            if (
+                cleaned
+                and len(cleaned.split()) <= 4
+                and not re.search(
+                    r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed)\b",
+                    cleaned,
+                    re.I,
+                )
+            ):
+                cname = canonicalize_dataset_name(cleaned)
+                if cname.casefold() not in seen_ds:
+                    seen_ds.add(cname.casefold())
+                    clean_datasets.append(
+                        {
+                            "name": cname,
+                            "evidence": item["evidence"],
+                            "support_status": "evidence_cited_unverified",
+                        }
+                    )
+            else:
+                found_names: set[str] = set()
+                for ckey, cval in CANONICAL_DATASET_MAP.items():
+                    if re.search(rf"\b{re.escape(ckey)}\b", stmt, re.I):
+                        found_names.add(cval)
+                for pat in (
+                    r"\b(?:including|such as|like|evaluated on|tested on|on the|across the|using the|from the)\s+([A-Z][A-Za-z0-9_+-]+(?:\s+[A-Za-z0-9_+-]+){0,2})",
+                    r"\b([A-Z][A-Za-z0-9_+-]+(?:\s+[A-Za-z0-9_+-]+){0,2})\s+(?:dataset|benchmark|cohort|corpus|database)\b",
+                ):
+                    for match in re.finditer(pat, stmt, re.I):
+                        cand = _clean_dataset_candidate(match.group(1))
+                        if (
+                            cand
+                            and len(cand.split()) <= 4
+                            and not re.search(
+                                r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed)\b",
+                                cand,
+                                re.I,
+                            )
+                        ):
+                            found_names.add(canonicalize_dataset_name(cand))
+                for ds_name in sorted(found_names):
+                    if ds_name.casefold() not in seen_ds:
+                        seen_ds.add(ds_name.casefold())
+                        clean_datasets.append(
+                            {
+                                "name": ds_name,
+                                "evidence": item["evidence"],
+                                "support_status": "evidence_cited_unverified",
+                            }
+                        )
+                if len(stmt.split()) >= 5:
+                    extra_results.append(
+                        {
+                            "statement": stmt,
+                            "evidence": item["evidence"],
+                            "support_status": "evidence_cited_unverified",
+                        }
+                    )
+        if clean_datasets:
+            experiments["datasets"] = clean_datasets
+
+    # 2. Clean metric entity extraction
+    raw_metrics = block_cited(generated.get("metrics", []))
+    if raw_metrics:
+        clean_metrics: list[dict[str, Any]] = []
+        seen_metrics: set[str] = set()
+        known_metric_pattern = re.compile(
+            r"^(?:Accuracy|Precision|Recall|Specificity|Sensitivity|Cosine\s+Similarity|DDI\s+Rate|"
+            r"Exact\s+Match|Perplexity|F1(?:\s*Score|-Score)?|IoU|mIoU|BLEU(?:-[0-9]+)?|ROUGE(?:-[0-9A-Za-z]+)?|"
+            r"AUROC|PRAUC|AUC|PR-?AUC|BERTScores?|MAE|MSE|RMSE|PSNR|SSIM|NDCG(?:@[0-9]+)?|MRR|MAP|cDice|DSC|HD95|ACC)$",
+            re.I,
+        )
+        for item in raw_metrics:
+            stmt = re.sub(r"\[BLOCK_ID=[^]]+\]", "", item["statement"]).strip()
+            if known_metric_pattern.match(stmt) and stmt.upper() not in METRIC_BLOCKLIST:
+                if stmt.casefold() not in seen_metrics:
+                    seen_metrics.add(stmt.casefold())
+                    clean_metrics.append(
+                        {
+                            "name": stmt,
+                            "evidence": item["evidence"],
+                            "support_status": "evidence_cited_unverified",
+                        }
+                    )
+            elif (
+                len(stmt.split()) == 1
+                and re.match(r"^[A-Z][A-Z0-9/+-]{1,7}$", stmt)
+                and stmt.upper() not in METRIC_BLOCKLIST
+                and stmt.casefold() not in DATASET_STOPWORDS
+            ):
+                if stmt.casefold() not in seen_metrics:
+                    seen_metrics.add(stmt.casefold())
+                    clean_metrics.append(
+                        {
+                            "name": stmt,
+                            "evidence": item["evidence"],
+                            "support_status": "evidence_cited_unverified",
+                        }
+                    )
+            else:
+                found_m: set[str] = set()
+                for m_match in re.finditer(
+                    r"\b([A-Z]{2,8}[0-9]*|[a-z]{1,2}[A-Z][A-Za-z0-9]{1,6}|[A-Z][0-9]+)\b",
+                    stmt,
+                ):
+                    cand_m = m_match.group(1).strip()
+                    if (
+                        cand_m.upper() not in METRIC_BLOCKLIST
+                        and cand_m.casefold() not in DATASET_STOPWORDS
+                        and len(cand_m) >= 2
+                    ):
+                        found_m.add(cand_m)
+                for m_match in re.finditer(
+                    r"\b(Accuracy|Precision|Recall|Specificity|Sensitivity|Cosine\s+Similarity|DDI\s+Rate|Exact\s+Match|Perplexity|BERTScore|AUROC|PRAUC|AUC|mIoU|IoU|BLEU|ROUGE|MAE|MSE|RMSE|PSNR|SSIM)\b",
+                    stmt,
+                    re.I,
+                ):
+                    cand_m = m_match.group(1).strip()
+                    if cand_m.upper() not in METRIC_BLOCKLIST:
+                        found_m.add(cand_m)
+                for m_name in sorted(found_m):
+                    if m_name.casefold() not in seen_metrics:
+                        seen_metrics.add(m_name.casefold())
+                        clean_metrics.append(
+                            {
+                                "name": m_name,
+                                "evidence": item["evidence"],
+                                "support_status": "evidence_cited_unverified",
+                            }
+                        )
+                if len(stmt.split()) >= 5:
+                    extra_results.append(
+                        {
+                            "statement": stmt,
+                            "evidence": item["evidence"],
+                            "support_status": "evidence_cited_unverified",
+                        }
+                    )
+        if clean_metrics:
+            experiments["metrics"] = clean_metrics
+
+    # 3. Combine results
     values = block_cited(generated.get("results", []))
-    if values:
-        experiments["results"] = values
+    all_results = values + extra_results
+    if all_results:
+        experiments["results"] = all_results
 
     analysis["extraction_mode"] = "llm_enriched_evidence_validated"
     validate_analysis(analysis)

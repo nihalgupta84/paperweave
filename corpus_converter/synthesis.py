@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ from .hashing import sha256_file
 from .io import read_json, write_json
 from .manifest import load_manifest, now, save_manifest, update_stage
 from .quality_report import write_quality_report
-from .semantic import canonicalize_dataset_name
+from .semantic import _clean_dataset_candidate, canonicalize_dataset_name
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,16 @@ def write_datasets(corpus: Path, records: list[tuple[Any, ...]]) -> None:
             raw_name = dataset.get("name", "").strip()
             if not raw_name:
                 continue
-            name = canonicalize_dataset_name(raw_name)
+            cleaned = _clean_dataset_candidate(raw_name)
+            if not cleaned or len(cleaned) > 40 or len(cleaned.split()) > 4:
+                continue
+            if re.search(
+                r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed|lasts|provided|obtained)\b",
+                cleaned,
+                re.I,
+            ):
+                continue
+            name = canonicalize_dataset_name(cleaned)
             key = name.casefold()
             raw_usage.setdefault(key, []).append((work, dataset))
             if key not in display_names:
@@ -111,7 +121,16 @@ def write_datasets(corpus: Path, records: list[tuple[Any, ...]]) -> None:
             raw_name = dataset.get("name", "").strip()
             if not raw_name:
                 continue
-            name = canonicalize_dataset_name(raw_name)
+            cleaned = _clean_dataset_candidate(raw_name)
+            if not cleaned or len(cleaned) > 40 or len(cleaned.split()) > 4:
+                continue
+            if re.search(
+                r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed|lasts|provided|obtained)\b",
+                cleaned,
+                re.I,
+            ):
+                continue
+            name = canonicalize_dataset_name(cleaned)
             key = name.casefold()
             raw_usage.setdefault(key, []).append((work, dataset))
             if key not in display_names:
@@ -303,15 +322,40 @@ def write_corpus_readme(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     for _, _, experiments, taxonomy in records:
         for ds in experiments.get("datasets", []):
             raw = ds.get("name", "").strip()
-            if raw:
-                datasets.add(canonicalize_dataset_name(raw).casefold())
+            cleaned = _clean_dataset_candidate(raw) if raw else None
+            if (
+                cleaned
+                and len(cleaned) <= 40
+                and len(cleaned.split()) <= 4
+                and not re.search(
+                    r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed|lasts|provided|obtained)\b",
+                    cleaned,
+                    re.I,
+                )
+            ):
+                datasets.add(canonicalize_dataset_name(cleaned).casefold())
         for ds in taxonomy.get("facets", {}).get("dataset", []):
             raw = ds.get("name", "").strip()
-            if raw:
-                datasets.add(canonicalize_dataset_name(raw).casefold())
+            cleaned = _clean_dataset_candidate(raw) if raw else None
+            if (
+                cleaned
+                and len(cleaned) <= 40
+                and len(cleaned.split()) <= 4
+                and not re.search(
+                    r"\b(?:is|was|are|were|evaluated|performed|used|tested|converts|based|summarized|interviewed|lasts|provided|obtained)\b",
+                    cleaned,
+                    re.I,
+                )
+            ):
+                datasets.add(canonicalize_dataset_name(cleaned).casefold())
         for m in experiments.get("metrics", []):
-            if m.get("name"):
-                metrics.add(m["name"].strip())
+            mname = m.get("name", "").strip()
+            if (
+                mname
+                and len(mname.split()) <= 4
+                and not re.search(r"\b(?:is|was|are|were|uses|evaluated)\b", mname, re.I)
+            ):
+                metrics.add(mname)
 
     lines = [
         "# PaperWeave Corpus",

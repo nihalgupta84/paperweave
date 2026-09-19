@@ -11,6 +11,7 @@ from .io import read_jsonl
 from .semantic import (
     DATASET_FALSE_POSITIVES,
     DATASET_STOPWORDS,
+    METRIC_BLOCKLIST,
     canonicalize_dataset_name,
     validate_evidence,
 )
@@ -113,7 +114,14 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
         results = experiments.get("results", [])
         total_metrics_found += len(metrics)
         for m in metrics:
-            all_metric_names.add(m.get("name", ""))
+            mname = m.get("name", "").strip()
+            if (
+                mname
+                and len(mname.split()) <= 4
+                and not re.search(r"\b(?:is|was|are|were|uses|evaluated)\b", mname, re.I)
+                and mname.upper() not in METRIC_BLOCKLIST
+            ):
+                all_metric_names.add(mname)
         has_m = bool(metrics)
         has_r = bool(results)
         if has_m:

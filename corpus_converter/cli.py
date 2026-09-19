@@ -75,7 +75,7 @@ def run_postprocess(
     profile: str | None,
     force_normalization: bool = False,
     force_analysis: bool = False,
-    provider_kind: str = "deterministic",
+    provider_kind: str = "auto",
     model: str | None = None,
     base_url: str | None = None,
     strict_provider: bool = False,
@@ -206,7 +206,7 @@ def main() -> None:
             command.add_argument(
                 "--semantic-provider",
                 choices=["auto", "auto-local", "deterministic", "ollama", "openai-compatible"],
-                default="deterministic",
+                default="auto",
             )
             command.add_argument("--model")
             command.add_argument("--base-url")
