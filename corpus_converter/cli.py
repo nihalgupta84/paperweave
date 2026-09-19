@@ -191,6 +191,11 @@ def main() -> None:
                 default=None,
                 help="Path to custom entities.json file (datasets/metrics lists).",
             )
+            command.add_argument(
+                "--force",
+                action="store_true",
+                help="Force re-analysis of all documents.",
+            )
         if name == "postprocess":
             command.add_argument("--force-normalization", action="store_true")
             command.add_argument("--force-analysis", action="store_true")
@@ -312,7 +317,7 @@ def main() -> None:
     elif args.command == "section":
         result = section_corpus(args.corpus)
     elif args.command == "analyze":
-        result = analyze_corpus(args.corpus, entities_path=getattr(args, "entities", None))
+        result = analyze_corpus(args.corpus, force=args.force, entities_path=getattr(args, "entities", None))
         result["evidence"] = validate_evidence(args.corpus)
     elif args.command == "classify":
         result = classify_corpus(args.corpus, PROJECT_ROOT, args.taxonomy_profile)

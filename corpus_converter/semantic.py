@@ -19,51 +19,122 @@ DEFAULT_ENTITIES_FILE = Path(__file__).resolve().parent / "taxonomies" / "entiti
 ENTITY_ROLES = {"abstract", "methodology", "experiments", "datasets", "results", "discussion", "conclusion"}
 DATASET_STOPWORDS = {
     "a",
+    "about",
+    "above",
     "across",
+    "after",
+    "against",
+    "all",
+    "along",
+    "among",
     "an",
+    "and",
+    "another",
+    "any",
+    "around",
     "as",
     "at",
+    "before",
+    "behind",
+    "below",
     "benchmark",
+    "beneath",
+    "beside",
+    "between",
+    "beyond",
+    "both",
+    "but",
     "by",
     "clinical",
     "cohort",
     "cohorts",
+    "concerning",
     "data",
+    "dataset",
+    "datasets",
+    "despite",
     "different",
+    "down",
+    "during",
+    "each",
+    "either",
+    "every",
+    "except",
     "external",
+    "following",
     "for",
     "from",
     "in",
+    "inside",
     "internal",
     "into",
     "its",
+    "like",
+    "near",
+    "neither",
     "new",
+    "next",
+    "no",
+    "nor",
+    "not",
     "of",
+    "off",
     "on",
     "onto",
+    "or",
+    "other",
     "our",
+    "out",
+    "outside",
+    "over",
+    "past",
     "per",
     "private",
     "public",
+    "regarding",
+    "round",
     "segmentation",
     "setting",
     "settings",
+    "several",
+    "since",
+    "so",
+    "some",
     "source",
+    "such",
     "test",
     "testing",
+    "than",
+    "that",
     "the",
     "their",
+    "them",
+    "these",
+    "this",
+    "those",
     "through",
+    "throughout",
+    "till",
     "to",
+    "toward",
+    "towards",
     "training",
+    "under",
+    "underneath",
+    "unlike",
+    "until",
+    "up",
+    "upon",
     "using",
     "validation",
     "via",
     "with",
+    "within",
+    "without",
 }
 
 # Full phrases or single words that, after stopword stripping, are never
-# legitimate standalone dataset names.  Checked via casefold().
+# legitimate standalone dataset names. Checked via casefold().
 DATASET_FALSE_POSITIVES = {
     # Demonstratives / conjunctions / adverbs
     "although",
@@ -97,6 +168,36 @@ DATASET_FALSE_POSITIVES = {
     "subsequently",
     "whereas",
     # Imaging modalities — never a dataset by themselves
+    "rgb",
+    "rgb-d",
+    "rgbd",
+    "rgb-polarization",
+    "polarization",
+    "polarized",
+    "depth",
+    "lidar",
+    "radar",
+    "monocular",
+    "stereo",
+    "multiview",
+    "multi-view",
+    "light field",
+    "lightfield",
+    "lf",
+    "point cloud",
+    "pointcloud",
+    "mesh",
+    "surface normal",
+    "disparity",
+    "optical flow",
+    "flow",
+    "event",
+    "event-based",
+    "thermal",
+    "infrared",
+    "tof",
+    "itof",
+    "dtof",
     "ct",
     "mri",
     "pet",
@@ -113,6 +214,9 @@ DATASET_FALSE_POSITIVES = {
     "fundoscopy",
     "ecg",
     "eeg",
+    "reflection",
+    "refraction",
+    "transmission",
     # Anatomy / clinical terms that appear near "dataset" but are not names
     "abdominal",
     "cardiac",
@@ -127,7 +231,7 @@ DATASET_FALSE_POSITIVES = {
     "renal",
     "retinal",
     "thoracic",
-    # Generic qualifiers
+    # Generic qualifiers / adjectives
     "clinical",
     "large scale",
     "large-scale",
@@ -138,7 +242,224 @@ DATASET_FALSE_POSITIVES = {
     "retrospective",
     "single-center",
     "single-centre",
+    "synthetic",
+    "real",
+    "real-world",
+    "simulated",
+    "photorealistic",
+    "rendered",
+    "indoor",
+    "outdoor",
+    "transparent",
+    "specular",
+    "mirror",
+    "glass",
+    "reflective",
+    "refractive",
+    "generic",
+    "specialized",
+    "custom",
+    "proprietary",
+    "public",
+    "private",
+    "internal",
+    "external",
+    "novel",
+    "proposed",
+    "our",
+    "new",
+    "existing",
+    "prior",
+    "baseline",
+    "benchmark",
+    "evaluation",
+    "test",
+    "testing",
+    "train",
+    "training",
+    "val",
+    "validation",
+    "pretraining",
+    "pre-training",
+    "fine-tuning",
+    "ablation",
+    "perspective",
+    "panoramic",
+    "fisheye",
+    "spherical",
+    "early",
+    "recent",
+    "later",
+    "other",
+    "another",
+    "all",
+    "both",
+    "each",
+    "every",
+    "individual",
+    "several",
+    "various",
+    "different",
+    "multiple",
+    "single",
+    "few",
+    "many",
+    "whole",
+    "full",
+    "raw",
+    "processed",
+    "clean",
+    "noisy",
+    "labeled",
+    "unlabeled",
+    "annotated",
+    "ground-truth",
+    "groundtruth",
+    "supervision",
+    # Document / Noun structural terms
+    "datum",
+    "corpus",
+    "database",
+    "scene",
+    "scenes",
+    "image",
+    "images",
+    "frame",
+    "frames",
+    "sample",
+    "samples",
+    "object",
+    "objects",
+    "surface",
+    "surfaces",
+    "target",
+    "targets",
+    "source",
+    "sources",
+    "domain",
+    "domains",
+    "environment",
+    "environments",
+    "detail",
+    "details",
+    "statistic",
+    "statistics",
+    "table",
+    "figure",
+    "fig",
+    "section",
+    "appendix",
+    "experiment",
+    "experiments",
+    "result",
+    "results",
+    "comparison",
+    "comparisons",
+    "method",
+    "methods",
+    "model",
+    "models",
+    "approach",
+    "approaches",
+    "algorithm",
+    "algorithms",
+    "framework",
+    "pipeline",
+    "architecture",
+    "module",
+    "design",
+    "performance",
+    "accuracy",
+    "error",
+    "metric",
+    "metrics",
+    "setup",
+    "protocol",
+    "setting",
+    "settings",
+    "task",
+    "tasks",
+    "challenge",
+    "dl-test",
+    "dl-test-real",
+    "apple",
+    "maria",
+    "tiger",
+    "walls",
+    "toronto",
+    "affordance",
+    "detection",
+    "segmentation",
 }
+
+CANONICAL_DATASET_MAP: dict[str, str] = {
+    "nyu depth v2": "NYUv2",
+    "nyu-v2": "NYUv2",
+    "nyuv2": "NYUv2",
+    "nyuv2-raw": "NYUv2",
+    "nyuv2-ref": "NYUv2",
+    "cleargrasp": "ClearGrasp",
+    "cleargrasp real": "ClearGrasp",
+    "clear-grasp real-novel": "ClearGrasp",
+    "clearpose": "ClearPose",
+    "cleardepth": "ClearDepth",
+    "transcg": "TransCG",
+    "trans10k": "Trans10K",
+    "trans10 k": "Trans10K",
+    "transcene": "TranScene",
+    "scannet": "ScanNet",
+    "scannet-reflection": "ScanNet",
+    "scannet-noreflection": "ScanNet",
+    "matterport3d": "Matterport3D",
+    "mp3d-mesh": "Matterport3D",
+    "mp3d-mesh-ref": "Matterport3D",
+    "mp3dmesh-ref": "Matterport3D",
+    "todd": "TODD",
+    "tod": "TODD",
+    "syn-todd": "TODD",
+    "toronto transparent objects depth": "TODD",
+    "gw-depth": "GW-Depth",
+    "gw depth": "GW-Depth",
+    "glass walls depth": "GW-Depth",
+    "glass-depth eval": "GW-Depth",
+    "ptod": "PTOD",
+    "polarized transparent object": "PTOD",
+    "xyz-ibd": "XYZ-IBD",
+    "xyz industrial bin picking": "XYZ-IBD",
+    "gift-i": "GIFT",
+    "gift-intervention": "GIFT",
+    "gift": "GIFT",
+    "omniverse": "Omniverse Object",
+    "omniverse object": "Omniverse Object",
+    "scene flow": "Scene Flow",
+    "booster": "Booster",
+    "laion": "LAION",
+    "coco": "COCO",
+    "kitti": "KITTI",
+    "imagenet": "ImageNet",
+    "sintel": "Sintel",
+    "mpi-sintel": "Sintel",
+    "crestereo": "CREStereo",
+    "flyingthings3d": "FlyingThings3D",
+    "afordpose": "AfordPose",
+    "gdd": "GDD",
+    "msd": "MSD",
+    "mirror3d": "Mirror3D",
+    "hammer": "HAMMER",
+    "hcinew": "HCInew",
+    "layereddepth-syn": "LayeredDepth-Syn",
+    "tartanair": "TartanAir",
+    "mvtrans": "MVTrans",
+}
+
+
+def canonicalize_dataset_name(name: str) -> str:
+    """Normalize dataset name variations, sub-splits, and casing to canonical benchmark names."""
+    trimmed = name.strip()
+    key = trimmed.casefold()
+    if key in CANONICAL_DATASET_MAP:
+        return CANONICAL_DATASET_MAP[key]
+    return trimmed
 
 
 def load_entities(custom_path: str | Path | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -228,7 +549,8 @@ def relevant_entity_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]
         block
         for block in blocks
         if block.get("section_role") in ENTITY_ROLES
-        and block.get("type") not in {"header", "footer", "page_number", "page_footnote"}
+        and block.get("type") not in {"header", "footer", "page_number", "page_footnote", "heading"}
+        and block.get("heading_level") is None
         and block.get("text", "").strip()
     ]
 
@@ -239,57 +561,115 @@ def find_mentions(blocks: list[dict[str, Any]], terms: tuple[str, ...]) -> list[
     for block in blocks:
         text = block.get("text", "")
         for term in terms:
-            if term.casefold() not in found and term_present(text, term):
-                found[term.casefold()] = {"name": term, "evidence": [evidence(block)]}
+            canonical = canonicalize_dataset_name(term)
+            if canonical.casefold() not in found and term_present(text, term):
+                found[canonical.casefold()] = {"name": canonical, "evidence": [evidence(block)]}
     return list(found.values())
 
 
 def _clean_dataset_candidate(value: str) -> str | None:
     # Strip citation references and numeric parentheticals
     value = re.sub(r"\[[^]]+\]|\([^)]*\d[^)]*\)", " ", value)
-    # Normalize spaced acronyms like "W O R D" -> "WORD"
+    # Normalize spaced acronyms & letter-digit spaces (e.g. "W O R D" -> "WORD", "TRANS10 K" -> "TRANS10K")
+    value = re.sub(r"\b([A-Za-z]+)\s+(\d+)\s+([A-Za-z]+)\b", r"\1\2\3", value)
+    value = re.sub(r"\b([A-Za-z0-9]+)\s+([0-9]+)\s+([A-Za-z]+)\b", r"\1\2\3", value)
     value = re.sub(r"\b([A-Z])\s+([A-Z])\s+([A-Z])\s+([A-Z])\b", r"\1\2\3\4", value)
     value = re.sub(r"\b([A-Z])\s+([A-Z])\s+([A-Z])\b", r"\1\2\3", value)
     value = re.sub(r"\s+", " ", value).strip(" ,.;:–—-")
 
     # Reject candidates containing sentence-ending punctuation inside them
-    # (catches leaks like "Data. Considering")
     if re.search(r"[.!?]\s+[A-Z]", value):
         return None
+
+    # Reject multi-word candidates starting with section-title prefixes
+    # (catches "Construction of CARE", "Description of WORD", "Overview of ...")
+    if re.match(
+        r"^(?:construction|description|overview|analysis|evaluation|"
+        r"comparison|application|introduction|utilization|collection|"
+        r"preparation|annotation|curation|summary|details)\s+of\b",
+        value,
+        re.I,
+    ):
+        return None
+
+    # If the candidate contains prepositions like "on the", "for the", "using the", take what follows
+    prep_match = list(
+        re.finditer(
+            r"\b(?:on|for|in|using|with|across|from|over|into|onto)\s+(?:the\s+|our\s+|a\s+|an\s+)?",
+            value,
+            re.I,
+        )
+    )
+    if prep_match:
+        value = value[prep_match[-1].end():].strip()
+
+    # Multi-pass stripping of leading prefixes (table titles, verbs, section markers, etc.)
+    lead_pattern = re.compile(
+        r"^(?:(?:[ivxlcdm]+|\d+|[a-z\d]+)\.\s+|unlike\b|following\b|regarding\b|concerning\b|during\b|according\s+to\b|does\b|is\b|are\b|were\b|was\b|can\b|could\b|will\b|would\b|what\b|who\b|which\b|where\b|when\b|why\b|how\b|since\b|as\b|because\b|if\b|when\b|while\b|whereas\b|although\b|though\b|however\b|(?:construction|curation|collection|annotation|generation|acquisition|preparation|statistics|description|details|overview|evaluation|comparison|analysis|setup|protocol|results|experiments|baseline|fusion\s+design)\s+of\s+(?:the\s+)?|results\s+on\b|evaluation\s+on\b|experiments\s+on\b|baseline\s+on\b|fusion\s+design\s+on\b|table\s+[ivxlcdm\d]+\b|fig(?:ure)?\.?\s*\d+\b|section\s+[a-z\d]+\b|appendix\s+[a-z\d]+\b)\s*",
+        re.I,
+    )
+    for _ in range(3):
+        value = value.strip(" ,.;:–—-")
+        value = lead_pattern.sub("", value).strip()
+        value = re.sub(r"^(?:the|our|a|an)\s+", "", value, flags=re.I).strip()
 
     words = value.split()
     while words and words[0].casefold() in DATASET_STOPWORDS:
         words.pop(0)
     while words and words[-1].casefold() in DATASET_STOPWORDS:
         words.pop()
+
+    # Strip leading single section letters like "D " in "D Glass ..."
+    if len(words) >= 2 and len(words[0]) == 1 and words[0].isalpha():
+        words.pop(0)
+
     value = " ".join(words)
 
-    if not value or len(value) > 80 or len(words) > 6:
-        return None
-    if value.casefold() in DATASET_STOPWORDS or not re.search(r"[A-Z0-9]", value):
-        return None
-
-    # Reject if the entire cleaned value matches a known false-positive
-    if value.casefold() in DATASET_FALSE_POSITIVES:
+    # Reject empty, too long, too many words
+    if not value or len(value) > 60 or len(words) > 4:
         return None
 
-    # Reject multi-word candidates starting with section-title prefixes
-    # (catches "Construction of CARE", "Description of WORD", "Overview of ...")
-    if len(words) >= 2 and re.match(
-        r"^(?:construction|description|overview|analysis|evaluation|"
-        r"comparison|application|introduction|utilization|collection|"
-        r"preparation|annotation|curation|summary|details)\b",
-        value,
-        re.I,
+    # Reject task descriptors (tasks are never dataset names)
+    if value.casefold().endswith(
+        (
+            " detection",
+            " segmentation",
+            " estimation",
+            " classification",
+            " reconstruction",
+            " completion",
+            " recognition",
+            " tracking",
+            " matching",
+        )
     ):
         return None
 
-    # Reject single-word candidates that look like common English words
-    # (not acronyms / proper nouns) — must have >= 3 chars or digits
-    if len(words) == 1 and len(value) < 3 and not re.search(r"[0-9]", value):
+    # Reject single letters, short abbreviations without digits, section numbering (e.g. C.1, A2b, I, D)
+    if len(value) <= 2 and not re.search(r"\d", value):
+        return None
+    if (
+        re.match(r"^[A-Z]\.?$", value)
+        or re.match(r"^[ivxlcdm]+\.?$", value, re.I)
+        or re.match(r"^[a-z]?\d+[a-z]?\.?$", value, re.I)
+        or re.match(r"^[A-Z]\.\d+\b", value)
+        or re.match(r"^Q\d+\b", value, re.I)
+    ):
         return None
 
-    return value
+    if value.casefold() in DATASET_STOPWORDS or not re.search(r"[A-Z0-9]", value):
+        return None
+
+    # Reject if matches false positives
+    if value.casefold() in DATASET_FALSE_POSITIVES:
+        return None
+
+    # Reject if all constituent words are generic/stopwords
+    if all(w.casefold() in DATASET_STOPWORDS or w.casefold() in DATASET_FALSE_POSITIVES for w in words):
+        return None
+
+    # Canonicalize
+    return canonicalize_dataset_name(value)
 
 
 def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -307,12 +687,15 @@ def discover_dataset_mentions(blocks: list[dict[str, Any]], configured: tuple[st
     for block in relevant:
         text = re.sub(r"<sup\b[^>]*>.*?</sup>", "", block.get("text", ""), flags=re.I | re.S)
         text = re.sub(r"<[^>]+>", "", text)
-        candidates = [match.group(1) for match in single.finditer(text)]
-        candidates.extend(match.group(1) for match in named.finditer(text))
+        candidates = []
+        for match in single.finditer(text):
+            candidates.extend(re.split(r"\s*(?:,|&|\band\b)\s*", match.group(1), flags=re.I))
+        for match in named.finditer(text):
+            candidates.extend(re.split(r"\s*(?:,|&|\band\b)\s*", match.group(1), flags=re.I))
         for match in examples.finditer(text):
-            candidates.extend(re.split(r"\s*(?:,|\band\b)\s*", match.group(1)))
+            candidates.extend(re.split(r"\s*(?:,|&|\band\b)\s*", match.group(1), flags=re.I))
         for match in coordinated.finditer(text):
-            candidates.extend(re.split(r"\s*(?:,|\band\b)\s*", match.group(1)))
+            candidates.extend(re.split(r"\s*(?:,|&|\band\b)\s*", match.group(1), flags=re.I))
         for candidate in candidates:
             cleaned = _clean_dataset_candidate(candidate)
             if cleaned and cleaned.casefold() not in found:

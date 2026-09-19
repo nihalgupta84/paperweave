@@ -12,6 +12,7 @@ from .hashing import sha256_file
 from .io import read_json, write_json
 from .manifest import load_manifest, now, save_manifest, update_stage
 from .quality_report import write_quality_report
+from .semantic import canonicalize_dataset_name
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def write_experiments(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     for work, _, experiments, _ in records:
         lines.extend([f"## {work['title']}", "", "### Datasets", ""])
         datasets = experiments.get("datasets", [])
-        lines.extend([f"- {item['name']}{evidence_suffix(item)}" for item in datasets] or ["Not extracted."])
+        lines.extend([f"- {canonicalize_dataset_name(item['name'])}{evidence_suffix(item)}" for item in datasets] or ["Not extracted."])
         lines.extend(["", "### Metrics", ""])
         metrics = experiments.get("metrics", [])
         lines.extend([f"- {item['name']}{evidence_suffix(item)}" for item in metrics] or ["Not extracted."])
@@ -95,18 +96,23 @@ def write_datasets(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     display_names: dict[str, str] = {}  # canonical casefold key → best display name
     for work, _, experiments, taxonomy in records:
         for dataset in experiments.get("datasets", []):
-            key = dataset["name"].strip().casefold()
-            raw_usage.setdefault(key, []).append((work, dataset))
-            # Prefer the version with more uppercase (proper name)
-            if key not in display_names or sum(1 for c in dataset["name"] if c.isupper()) > sum(
-                1 for c in display_names[key] if c.isupper()
-            ):
-                display_names[key] = dataset["name"]
-        for dataset in taxonomy.get("facets", {}).get("dataset", []):
-            key = dataset["name"].strip().casefold()
+            raw_name = dataset.get("name", "").strip()
+            if not raw_name:
+                continue
+            name = canonicalize_dataset_name(raw_name)
+            key = name.casefold()
             raw_usage.setdefault(key, []).append((work, dataset))
             if key not in display_names:
-                display_names[key] = dataset["name"]
+                display_names[key] = name
+        for dataset in taxonomy.get("facets", {}).get("dataset", []):
+            raw_name = dataset.get("name", "").strip()
+            if not raw_name:
+                continue
+            name = canonicalize_dataset_name(raw_name)
+            key = name.casefold()
+            raw_usage.setdefault(key, []).append((work, dataset))
+            if key not in display_names:
+                display_names[key] = name
 
     lines = ["# Corpus Dataset Index", ""]
     if not raw_usage:
@@ -293,11 +299,13 @@ def write_corpus_readme(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     metrics: set[str] = set()
     for _, _, experiments, taxonomy in records:
         for ds in experiments.get("datasets", []):
-            if ds.get("name"):
-                datasets.add(ds["name"].strip().casefold())
+            raw = ds.get("name", "").strip()
+            if raw:
+                datasets.add(canonicalize_dataset_name(raw).casefold())
         for ds in taxonomy.get("facets", {}).get("dataset", []):
-            if ds.get("name"):
-                datasets.add(ds["name"].strip().casefold())
+            raw = ds.get("name", "").strip()
+            if raw:
+                datasets.add(canonicalize_dataset_name(raw).casefold())
         for m in experiments.get("metrics", []):
             if m.get("name"):
                 metrics.add(m["name"].strip())

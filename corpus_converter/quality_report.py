@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from .io import read_jsonl
-from .semantic import DATASET_FALSE_POSITIVES, DATASET_STOPWORDS, validate_evidence
+from .semantic import (
+    DATASET_FALSE_POSITIVES,
+    DATASET_STOPWORDS,
+    canonicalize_dataset_name,
+    validate_evidence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +53,13 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
     for work, _, experiments, taxonomy in records:
         work_title = work.get("title", "Untitled")
         for ds in experiments.get("datasets", []):
-            name = ds.get("name", "").strip()
+            raw_name = ds.get("name", "").strip()
+            name = canonicalize_dataset_name(raw_name)
             if name:
                 all_datasets.setdefault(name, []).append(work_title)
         for ds in taxonomy.get("facets", {}).get("dataset", []):
-            name = ds.get("name", "").strip()
+            raw_name = ds.get("name", "").strip()
+            name = canonicalize_dataset_name(raw_name)
             if name:
                 all_datasets.setdefault(name, []).append(work_title)
 
@@ -64,12 +71,31 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
             reasons.append("matches stopword")
         if name_lower in DATASET_FALSE_POSITIVES:
             reasons.append("matches known false positive")
-        if len(name) <= 2:
+        if len(name) <= 2 and not re.search(r"\d", name):
             reasons.append("suspiciously short (<= 2 chars)")
         if re.search(r"[.!?]\s+[A-Z]", name):
             reasons.append("contains sentence boundary")
+        # Independent quality heuristics (catches leaks that bypass simple stopword lists)
+        if re.search(r"\b(?:table|fig|figure|section|appendix)\b", name, re.I):
+            reasons.append("contains table/figure/section marker")
+        if re.search(r"\b(?:comparison|evaluations?|results?|ablation|baseline|methods?|details|statistics|overview|following|unlike|since)\b", name, re.I):
+            reasons.append("contains procedural/heading keyword")
+        if re.search(r"\b(?:on\s+the|for\s+the|in\s+the|using\s+the|across\s+the)\b", name, re.I):
+            reasons.append("contains prepositional phrase")
+        if name.isupper() and len(name.split()) >= 3:
+            reasons.append("all-caps multi-word phrase (likely table heading)")
+        if re.match(r"^Q\d+\b", name, re.I):
+            reasons.append("question questionnaire marker")
         if reasons:
             suspicious_datasets.append({"name": name, "reasons": reasons, "works": works})
+
+    density = len(all_datasets) / max(total_works, 1)
+    if density > 1.5:
+        dataset_status = "Warning (High Density)"
+    elif suspicious_datasets:
+        dataset_status = "Review Needed"
+    else:
+        dataset_status = "Pass"
 
     # 3. Metric & Results Coverage Audit
     works_with_metrics = 0
@@ -120,7 +146,7 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
         f"| Total Scholarly Works | {total_works} | Info |",
         f"| Total Document Representations | {total_docs} | Info |",
         f"| Multi-Document Merged Works | {len(multi_doc_works)} | {'Notice' if multi_doc_works else 'Info'} |",
-        f"| Unique Datasets Identified | {len(all_datasets)} | {'Warning' if suspicious_datasets else 'Pass'} |",
+        f"| Unique Datasets Identified | {len(all_datasets)} ({density:.2f}/work) | {dataset_status} |",
         f"| Suspicious Dataset Candidates | {len(suspicious_datasets)} | {'Pass' if not suspicious_datasets else 'Review Needed'} |",
         f"| Works with Extracted Metrics | {works_with_metrics}/{total_works} | {'Pass' if works_with_metrics > 0 or total_works == 0 else 'Notice'} |",
         f"| Evidence Locator Validity | {valid_ev}/{total_ev} ({ev_rate:.1f}%) | {'Pass' if invalid_ev == 0 else 'Review Needed'} |",
@@ -167,10 +193,19 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
         [
             "## 2. Dataset Mention Hygiene Audit",
             "",
-            f"Total unique datasets found across the corpus: **{len(all_datasets)}**.",
+            f"Total unique datasets found across the corpus: **{len(all_datasets)}** ({density:.2f} datasets/work).",
             "",
         ]
     )
+    if density > 1.5:
+        lines.extend(
+            [
+                "> [!WARNING]",
+                f"> High dataset density detected: {len(all_datasets)} unique datasets across {total_works} works ({density:.2f} datasets/work > 1.5 threshold).",
+                "> This typically indicates unmerged sub-dataset splits, table header leaks, or generic term captures.",
+                "",
+            ]
+        )
     if suspicious_datasets:
         lines.append("### Flagged Suspicious Mentions")
         lines.append("")
