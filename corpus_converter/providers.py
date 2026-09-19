@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -97,38 +99,231 @@ def resolve_mineru_command(explicit: str | os.PathLike[str] | None = None) -> tu
     return None, None
 
 
-def compute_capabilities() -> dict[str, Any]:
-    """Detect available compute resources and optional workflow commands."""
-    gpu = {"available": False, "name": None, "memory_mb": None}
+def detect_system_vram_and_hardware() -> tuple[int, int, str, str]:
+    """Detect available VRAM/RAM (free_mb, total_mb), backend type, and device name without external heavy dependencies."""
+    # 1. NVIDIA GPU via nvidia-smi
     if shutil.which("nvidia-smi"):
         try:
             output = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=10,
+                timeout=5,
             ).stdout.splitlines()
             if output and "," in output[0]:
-                name, memory = output[0].rsplit(",", 1)
-                memory_mb = int(memory.strip()) if memory.strip().isdigit() else None
-                gpu = {"available": True, "name": name.strip(), "memory_mb": memory_mb}
+                parts = [p.strip() for p in output[0].split(",")]
+                if len(parts) >= 3 and parts[1].isdigit() and parts[2].isdigit():
+                    name = parts[0]
+                    total_mb = int(parts[1])
+                    free_mb = int(parts[2])
+                    return free_mb, total_mb, "cuda", name
+                elif len(parts) >= 1 and parts[0]:
+                    # In MIG mode or container restrictions, parse raw nvidia-smi table
+                    raw_txt = subprocess.check_output(["nvidia-smi"], text=True, timeout=5)
+                    mig_match = re.search(r"(\d+)\s*MiB\s*/\s*(\d+)\s*MiB", raw_txt)
+                    if mig_match:
+                        used_mb = int(mig_match.group(1))
+                        total_mb = int(mig_match.group(2))
+                        free_mb = max(0, total_mb - used_mb)
+                        return free_mb, total_mb, "cuda", parts[0]
         except Exception as e:
-            logger.debug("nvidia-smi query failed: %s", e)
+            logger.debug("nvidia-smi VRAM probe failed: %s", e)
 
-    if not gpu["available"]:
+    # 2. PyTorch CUDA fallback
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            dev_idx = torch.cuda.current_device()
+            name = torch.cuda.get_device_name(dev_idx)
+            free_b, total_b = torch.cuda.mem_get_info(dev_idx)
+            return round(free_b / (1024 * 1024)), round(total_b / (1024 * 1024)), "cuda", name
+    except Exception as e:
+        logger.debug("torch cuda probe failed: %s", e)
+
+    # 3. Apple Silicon (Darwin / ARM) Unified Memory
+    if platform.system() == "Darwin" and platform.processor() == "arm":
         try:
-            import torch
-
-            if torch.cuda.is_available():
-                properties = torch.cuda.get_device_properties(0)
-                gpu = {
-                    "available": True,
-                    "name": torch.cuda.get_device_name(0),
-                    "memory_mb": round(properties.total_memory / (1024 * 1024)),
-                }
+            mem_str = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True, timeout=5).strip()
+            total_mb = round(int(mem_str) / (1024 * 1024))
+            free_mb = round(total_mb * 0.65)
+            return free_mb, total_mb, "metal", "Apple Silicon Unified Memory"
         except Exception as e:
-            logger.debug("torch cuda check failed: %s", e)
+            logger.debug("sysctl memsize probe failed: %s", e)
+
+    # 4. CPU / Host System RAM fallback
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        total_mb = round((pages * page_size) / (1024 * 1024))
+        try:
+            avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+            free_mb = round((avail_pages * page_size) / (1024 * 1024))
+        except Exception:
+            free_mb = round(total_mb * 0.5)
+        return free_mb, total_mb, "cpu", "CPU System Memory"
+    except Exception:
+        pass
+
+    return 4096, 8192, "cpu", "Generic Host Memory"
+
+
+def select_optimal_model_for_vram(free_mb: int, backend: str = "cuda") -> tuple[str, str]:
+    """Select the highest-quality LLM variant that safely maximizes utilization within the available VRAM envelope."""
+    # First: if llm-checker is installed, query its recommendation
+    checker = shutil.which("llm-checker")
+    if checker:
+        try:
+            cmd = [checker, "smart-recommend", "--json", "--limit", "3"]
+            res = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=15)
+            payload = _json_fragment(res.stdout)
+            if isinstance(payload, dict) and payload.get("recommendations"):
+                top = payload["recommendations"][0]
+                tag = top.get("variant", {}).get("tag")
+                if tag:
+                    return tag, f"llm-checker hardware recommendation ({tag})"
+        except Exception as err:
+            logger.debug("llm-checker smart-recommend failed: %s", err)
+
+    # For CPU execution, throttle model size so inference doesn't stall
+    if backend == "cpu":
+        if free_mb >= 16000:
+            return "qwen2.5-coder:7b-instruct-q8_0", f"CPU host memory ({free_mb} MB) -> 7B Q8"
+        elif free_mb >= 8000:
+            return "qwen2.5:3b", f"CPU host memory ({free_mb} MB) -> 3B"
+        else:
+            return "qwen2.5:1.5b", f"CPU host memory ({free_mb} MB) -> 1.5B"
+
+    # GPU (CUDA / Metal) hardware-aware model envelope
+    if free_mb >= 30000:
+        return "qwen2.5-coder:14b-instruct-q8_0", f"High VRAM ({free_mb} MB) -> 14B Q8"
+    elif free_mb >= 14000:
+        return "qwen2.5-coder:14b-instruct-q6_K", f"Mid-high VRAM ({free_mb} MB) -> 14B Q6_K"
+    elif free_mb >= 7000:
+        return "qwen2.5-coder:7b-instruct-q8_0", f"Mid VRAM ({free_mb} MB) -> 7B Q8"
+    elif free_mb >= 4000:
+        return "qwen2.5:3b", f"Low VRAM ({free_mb} MB) -> 3B"
+    else:
+        return "qwen2.5:1.5b", f"Minimal VRAM/RAM ({free_mb} MB) -> 1.5B"
+
+
+def ensure_ollama_service_and_model(
+    model: str,
+    base_url: str = "http://127.0.0.1:11434",
+    auto_pull: bool = True,
+) -> tuple[bool, Callable[[], None] | None, str | None]:
+    """Ensure Ollama is running and the specified model is ready.
+
+    If the server is not running, launches an ephemeral background process and returns a cleanup callback.
+    If the model is not downloaded, pulls it automatically.
+    """
+    ollama_cmd = shutil.which("ollama")
+    cleanup_fn: Callable[[], None] | None = None
+    server_ready = False
+
+    # 1. Check if server is already responding
+    try:
+        request_json(f"{base_url.rstrip('/')}/api/tags", timeout=2)
+        server_ready = True
+    except Exception:
+        server_ready = False
+
+    # 2. If not running, attempt to spawn ephemeral background server (only for default local endpoint)
+    if not server_ready:
+        is_default_local = base_url.rstrip("/") in {"http://127.0.0.1:11434", "http://localhost:11434"}
+        if not is_default_local:
+            return False, None, f"Ollama endpoint unavailable at {base_url}"
+
+        if not ollama_cmd:
+            return False, None, "Ollama CLI is not installed (install from https://ollama.com to enable local LLM)"
+
+        try:
+            env = os.environ.copy()
+            proc = subprocess.Popen(
+                [ollama_cmd, "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+            )
+
+            # Poll for readiness up to 10 seconds
+            start_time = time.time()
+            while time.time() - start_time < 10:
+                time.sleep(0.5)
+                try:
+                    request_json(f"{base_url.rstrip('/')}/api/tags", timeout=2)
+                    server_ready = True
+                    break
+                except Exception:
+                    continue
+
+            if not server_ready:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except Exception:
+                    proc.kill()
+                return False, None, f"Ollama server started but endpoint remains unavailable at {base_url}"
+
+            def _cleanup() -> None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+
+            cleanup_fn = _cleanup
+        except Exception as e:
+            return False, None, f"Failed to launch Ollama server: {e}"
+
+    # 3. Check if model is downloaded; pull if missing
+    try:
+        tags = request_json(f"{base_url.rstrip('/')}/api/tags", timeout=5)
+        installed = {str(item.get("name")) for item in tags.get("models", []) if item.get("name")}
+    except Exception as e:
+        if cleanup_fn:
+            cleanup_fn()
+        return False, None, f"Failed to list models from Ollama: {e}"
+
+    model_present = (
+        model in installed
+        or any(name.startswith(f"{model}:") or model.startswith(f"{name}:") for name in installed)
+    )
+
+    if not model_present:
+        if not auto_pull or not ollama_cmd:
+            if cleanup_fn:
+                cleanup_fn()
+            return False, None, f"Model '{model}' is not installed in Ollama"
+
+        logger.info("Local model '%s' not cached. Automatically pulling via Ollama...", model)
+        try:
+            subprocess.run([ollama_cmd, "pull", model], check=True, timeout=600)
+        except Exception as e:
+            if cleanup_fn:
+                cleanup_fn()
+            return False, None, f"Failed to pull model '{model}': {e}"
+
+    return True, cleanup_fn, None
+
+
+def compute_capabilities() -> dict[str, Any]:
+    """Detect available compute resources, VRAM budget, and optimal workflow commands."""
+    free_mb, total_mb, backend, dev_name = detect_system_vram_and_hardware()
+    recommended_model, rec_reason = select_optimal_model_for_vram(free_mb, backend)
+    gpu = {
+        "available": backend in {"cuda", "metal"},
+        "name": dev_name,
+        "memory_mb": total_mb,
+        "free_memory_mb": free_mb,
+        "backend": backend,
+        "recommended_model": recommended_model,
+        "model_selection_reason": rec_reason,
+    }
 
     mineru_cmd, mineru_ver = resolve_mineru_command()
     return {
@@ -153,6 +348,17 @@ class ProviderResolution:
     provider: Any = None
     fallback_reason: str | None = None
     model: str | None = None
+    cleanup_fn: Any = None
+
+    def cleanup(self) -> None:
+        """Terminate any ephemeral background services spawned during this session."""
+        if callable(self.cleanup_fn):
+            try:
+                self.cleanup_fn()
+            except Exception as err:
+                logger.debug("Provider cleanup failed: %s", err)
+            finally:
+                self.cleanup_fn = None
 
 
 def _json_fragment(value: str) -> Any:
@@ -307,20 +513,48 @@ def resolve_provider(
     """Resolve requested semantic provider with automatic graceful fallback to deterministic mode."""
     if kind in {"none", "deterministic"}:
         return ProviderResolution(kind, "deterministic")
-    if kind == "auto":
+
+    if kind in {"auto", "auto-local"}:
         ollama_url = base_url or "http://127.0.0.1:11434"
-        selected, reason = (model, None) if model else select_ollama_model_with_llm_checker(ollama_url)
+        selected = model
+        selection_reason = None
+
+        if not selected:
+            # 1. If server is already active with installed models, rank them
+            selected, selection_reason = select_ollama_model_with_llm_checker(ollama_url)
+            if selected:
+                provider = OllamaProvider(selected, ollama_url)
+                available, probe_reason = provider.probe()
+                if available:
+                    return ProviderResolution(kind, "ollama", provider=provider, model=selected)
+
+            # 2. Otherwise, autonomously choose optimal model by VRAM envelope
+            free_mb, total_mb, backend, dev_name = detect_system_vram_and_hardware()
+            selected, selection_reason = select_optimal_model_for_vram(free_mb, backend)
+
         if not selected:
             if strict:
-                raise RuntimeError(reason or "No local semantic model is available")
-            return ProviderResolution("auto", "deterministic", fallback_reason=reason)
+                raise RuntimeError(selection_reason or "No local semantic model is available")
+            return ProviderResolution(kind, "deterministic", fallback_reason=selection_reason)
+
+        ok, cleanup_fn, err = ensure_ollama_service_and_model(selected, ollama_url)
+        if not ok:
+            if strict:
+                raise RuntimeError(err or "Failed to initialize local LLM")
+            logger.info("Local LLM not available: %s. Using deterministic grounded extraction.", err)
+            return ProviderResolution(kind, "deterministic", fallback_reason=err)
+
         provider = OllamaProvider(selected, ollama_url)
         available, probe_reason = provider.probe()
         if not available:
+            if cleanup_fn:
+                cleanup_fn()
             if strict:
                 raise RuntimeError(probe_reason)
-            return ProviderResolution("auto", "deterministic", fallback_reason=probe_reason)
-        return ProviderResolution("auto", "ollama", provider=provider, model=selected)
+            return ProviderResolution(kind, "deterministic", fallback_reason=probe_reason)
+
+        return ProviderResolution(kind, "ollama", provider=provider, model=selected, cleanup_fn=cleanup_fn)
+
     if not model:
         reason = "No semantic model was specified"
         if strict:
@@ -328,7 +562,22 @@ def resolve_provider(
         return ProviderResolution(kind, "deterministic", fallback_reason=reason)
 
     if kind == "ollama":
-        provider = OllamaProvider(model, base_url or "http://127.0.0.1:11434")
+        ollama_url = base_url or "http://127.0.0.1:11434"
+        ok, cleanup_fn, err = ensure_ollama_service_and_model(model, ollama_url)
+        if not ok:
+            if strict:
+                raise RuntimeError(err)
+            return ProviderResolution(kind, "deterministic", fallback_reason=err)
+        provider = OllamaProvider(model, ollama_url)
+        available, probe_reason = provider.probe()
+        if not available:
+            if cleanup_fn:
+                cleanup_fn()
+            if strict:
+                raise RuntimeError(probe_reason)
+            return ProviderResolution(kind, "deterministic", fallback_reason=probe_reason)
+        return ProviderResolution(kind, "ollama", provider=provider, model=model, cleanup_fn=cleanup_fn)
+
     elif kind == "openai-compatible":
         provider = OpenAICompatibleProvider(model, base_url or "http://127.0.0.1:8000/v1")
     else:

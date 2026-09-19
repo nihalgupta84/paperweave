@@ -16,7 +16,13 @@ from corpus_converter.grobid import GrobidAdapter, enrich_corpus_with_grobid, pa
 from corpus_converter.ingestion import pdf_preflight
 from corpus_converter.io import read_json, write_json, write_jsonl
 from corpus_converter.pipeline import prune_mineru_output, run_mineru, run_pipeline
-from corpus_converter.providers import resolve_provider
+from corpus_converter.providers import (
+    ProviderResolution,
+    detect_system_vram_and_hardware,
+    ensure_ollama_service_and_model,
+    resolve_provider,
+    select_optimal_model_for_vram,
+)
 from corpus_converter.retrieval import build_search_index, search_corpus
 from corpus_converter.semantic import discover_dataset_mentions, find_mentions
 
@@ -341,6 +347,103 @@ class IntegrationTests(unittest.TestCase):
             self.assertTrue(any(edge["type"] == "classified_as" for edge in graph["edges"]))
             ElementTree.parse(corpus / "records" / "knowledge_graph.graphml")
 
+    def test_detect_system_vram_and_hardware_simulated(self) -> None:
+        # 1. Simulated NVIDIA GPU
+        with patch("corpus_converter.providers.shutil.which", side_effect=lambda cmd: "/usr/bin/nvidia-smi" if cmd == "nvidia-smi" else None):
+            with patch("corpus_converter.providers.subprocess.run", return_value=CompletedProcess([], 0, "RTX 4090, 24576, 21500\n", "")):
+                free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
+                self.assertEqual(backend, "cuda")
+                self.assertEqual(free_mb, 21500)
+                self.assertEqual(total_mb, 24576)
+                self.assertEqual(name, "RTX 4090")
+
+        # 2. Simulated Mac Apple Silicon
+        with (
+            patch("corpus_converter.providers.shutil.which", return_value=None),
+            patch("corpus_converter.providers.platform.system", return_value="Darwin"),
+            patch("corpus_converter.providers.platform.processor", return_value="arm"),
+            patch("corpus_converter.providers.subprocess.check_output", return_value="17179869184\n"),  # 16 GB
+        ):
+            free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
+            self.assertEqual(backend, "metal")
+            self.assertEqual(total_mb, 16384)
+            self.assertEqual(free_mb, round(16384 * 0.65))
+
+        # 3. Simulated CPU Fallback
+        with (
+            patch("corpus_converter.providers.shutil.which", return_value=None),
+            patch("corpus_converter.providers.platform.system", return_value="Linux"),
+            patch("corpus_converter.providers.os.sysconf", side_effect=lambda name: 4096 if name == "SC_PAGE_SIZE" else 2097152),
+        ):
+            free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
+            self.assertEqual(backend, "cpu")
+            self.assertEqual(total_mb, 8192)
+
+    def test_select_optimal_model_for_vram_tiers(self) -> None:
+        # High VRAM (e.g. A100 40GB)
+        with patch("corpus_converter.providers.shutil.which", return_value=None):
+            model, reason = select_optimal_model_for_vram(36000, "cuda")
+            self.assertEqual(model, "qwen2.5-coder:14b-instruct-q8_0")
+            self.assertIn("14B Q8", reason)
+
+            # Mid-high VRAM (e.g. 16-24GB)
+            model, reason = select_optimal_model_for_vram(18000, "cuda")
+            self.assertEqual(model, "qwen2.5-coder:14b-instruct-q6_K")
+            self.assertIn("14B Q6_K", reason)
+
+            # Mid VRAM (e.g. 8-12GB)
+            model, reason = select_optimal_model_for_vram(8000, "cuda")
+            self.assertEqual(model, "qwen2.5-coder:7b-instruct-q8_0")
+            self.assertIn("7B Q8", reason)
+
+            # Low VRAM (<7GB)
+            model, reason = select_optimal_model_for_vram(5000, "cuda")
+            self.assertEqual(model, "qwen2.5:3b")
+
+            # CPU throttled model selection
+            model_cpu, _ = select_optimal_model_for_vram(64000, "cpu")
+            self.assertEqual(model_cpu, "qwen2.5-coder:7b-instruct-q8_0")
+
+    def test_ensure_ollama_service_reuses_active_server(self) -> None:
+        # If server responds at /api/tags and has model, no child process is spawned
+        with patch("corpus_converter.providers.request_json", return_value={"models": [{"name": "qwen2.5-coder:7b"}]}):
+            ok, cleanup_fn, err = ensure_ollama_service_and_model("qwen2.5-coder:7b")
+            self.assertTrue(ok)
+            self.assertIsNone(cleanup_fn)
+            self.assertIsNone(err)
+
+    def test_ensure_ollama_service_handles_missing_runtime_gracefully(self) -> None:
+        # If server is down and ollama is not on PATH, return False without crashing
+        with (
+            patch("corpus_converter.providers.request_json", side_effect=OSError("connection refused")),
+            patch("corpus_converter.providers.shutil.which", return_value=None),
+        ):
+            ok, cleanup_fn, err = ensure_ollama_service_and_model("qwen2.5-coder:7b")
+            self.assertFalse(ok)
+            self.assertIsNone(cleanup_fn)
+            self.assertIn("not installed", str(err))
+
+    def test_provider_resolution_cleanup_lifecycle(self) -> None:
+        cleaned_up = False
+
+        def fake_cleanup() -> None:
+            nonlocal cleaned_up
+            cleaned_up = True
+
+        res = ProviderResolution(
+            requested="auto",
+            effective="ollama",
+            model="qwen:7b",
+            cleanup_fn=fake_cleanup,
+        )
+        self.assertFalse(cleaned_up)
+        res.cleanup()
+        self.assertTrue(cleaned_up)
+        self.assertIsNone(res.cleanup_fn)
+        # Calling cleanup again is a safe no-op
+        res.cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()
+

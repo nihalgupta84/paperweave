@@ -83,27 +83,30 @@ def run_postprocess(
 ) -> dict:
     """Run all postprocessing stages on an existing corpus."""
     resolution = resolve_provider(provider_kind, model, base_url, strict_provider)
-    result = {
-        "compute": compute_capabilities(),
-        "non_pdf_normalization": normalize_non_pdf(corpus, force=force_normalization),
-        "sections": section_corpus(corpus),
-        "analysis": analyze_corpus(corpus, force=force_analysis, entities_path=entities_path),
-    }
-    result["semantic_provider"] = enrich_corpus(corpus, resolution, force=force_analysis)
-    evidence = validate_evidence(corpus)
-    if evidence["invalid"]:
-        raise RuntimeError(f"Evidence validation failed: {evidence}")
-    result["evidence"] = evidence
-    result["taxonomy"] = classify_corpus(corpus, PROJECT_ROOT, profile)
-    result["collections"] = generate_collections(corpus)
-    result["synthesis"] = synthesize_incremental(corpus)
-    from .citation_graph import build_knowledge_graph
-    from .retrieval import build_search_index
+    try:
+        result = {
+            "compute": compute_capabilities(),
+            "non_pdf_normalization": normalize_non_pdf(corpus, force=force_normalization),
+            "sections": section_corpus(corpus),
+            "analysis": analyze_corpus(corpus, force=force_analysis, entities_path=entities_path),
+        }
+        result["semantic_provider"] = enrich_corpus(corpus, resolution, force=force_analysis)
+        evidence = validate_evidence(corpus)
+        if evidence["invalid"]:
+            raise RuntimeError(f"Evidence validation failed: {evidence}")
+        result["evidence"] = evidence
+        result["taxonomy"] = classify_corpus(corpus, PROJECT_ROOT, profile)
+        result["collections"] = generate_collections(corpus)
+        result["synthesis"] = synthesize_incremental(corpus)
+        from .citation_graph import build_knowledge_graph
+        from .retrieval import build_search_index
 
-    result["graph"] = build_knowledge_graph(corpus)
-    result["search_index"] = build_search_index(corpus)
-    write_json(corpus / "manifests" / "last_run.json", result)
-    return result
+        result["graph"] = build_knowledge_graph(corpus)
+        result["search_index"] = build_search_index(corpus)
+        write_json(corpus / "manifests" / "last_run.json", result)
+        return result
+    finally:
+        resolution.cleanup()
 
 
 def main() -> None:
@@ -137,8 +140,9 @@ def main() -> None:
     run_parser.add_argument("--taxonomy-profile", default="core")
     run_parser.add_argument(
         "--semantic-provider",
-        choices=["auto", "deterministic", "ollama", "openai-compatible"],
+        choices=["auto", "auto-local", "deterministic", "ollama", "openai-compatible"],
         default="auto",
+        help="Semantic model provider (default: auto, autonomously profiles VRAM and selects the optimal local model).",
     )
     run_parser.add_argument("--model")
     run_parser.add_argument("--base-url", help="OpenAI-compatible model endpoint.")
@@ -201,7 +205,7 @@ def main() -> None:
             command.add_argument("--force-analysis", action="store_true")
             command.add_argument(
                 "--semantic-provider",
-                choices=["deterministic", "ollama", "openai-compatible"],
+                choices=["auto", "auto-local", "deterministic", "ollama", "openai-compatible"],
                 default="deterministic",
             )
             command.add_argument("--model")
