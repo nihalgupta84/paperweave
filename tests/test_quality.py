@@ -78,6 +78,7 @@ class QualityTest(unittest.TestCase):
 
     def test_quality_report_dataset_density_warning(self):
         from corpus_converter.quality_report import generate_quality_report
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             corpus_dir = Path(tmp_dir)
             records_dir = corpus_dir / "records"
@@ -92,15 +93,13 @@ class QualityTest(unittest.TestCase):
             self.assertIn("Pass", report)
 
             # Create high-density fake datasets (e.g. 5 datasets for 1 paper > 1.5 ratio)
-            mock_exp_bloated = {
-                "datasets": [{"name": f"FakeDS_{i}"} for i in range(5)],
-                "metrics": [{"name": "IoU"}]
-            }
-            report_bloated = generate_quality_report(corpus_dir, [(mock_work, mock_analysis, mock_exp_bloated, mock_tax)])
+            mock_exp_bloated = {"datasets": [{"name": f"FakeDS_{i}"} for i in range(5)], "metrics": [{"name": "IoU"}]}
+            report_bloated = generate_quality_report(
+                corpus_dir, [(mock_work, mock_analysis, mock_exp_bloated, mock_tax)]
+            )
             self.assertIn("High dataset density detected", report_bloated)
             self.assertIn("Warning (High Density)", report_bloated)
 
 
 if __name__ == "__main__":
     unittest.main()
-

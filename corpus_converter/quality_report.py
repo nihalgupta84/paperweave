@@ -78,7 +78,11 @@ def generate_quality_report(corpus: Path, records: list[tuple[Any, ...]]) -> str
         # Independent quality heuristics (catches leaks that bypass simple stopword lists)
         if re.search(r"\b(?:table|fig|figure|section|appendix)\b", name, re.I):
             reasons.append("contains table/figure/section marker")
-        if re.search(r"\b(?:comparison|evaluations?|results?|ablation|baseline|methods?|details|statistics|overview|following|unlike|since)\b", name, re.I):
+        if re.search(
+            r"\b(?:comparison|evaluations?|results?|ablation|baseline|methods?|details|statistics|overview|following|unlike|since)\b",
+            name,
+            re.I,
+        ):
             reasons.append("contains procedural/heading keyword")
         if re.search(r"\b(?:on\s+the|for\s+the|in\s+the|using\s+the|across\s+the)\b", name, re.I):
             reasons.append("contains prepositional phrase")

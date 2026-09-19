@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -12,8 +13,9 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -271,10 +273,8 @@ def ensure_ollama_service_and_model(
                     proc.terminate()
                     proc.wait(timeout=5)
                 except Exception:
-                    try:
+                    with contextlib.suppress(Exception):
                         proc.kill()
-                    except Exception:
-                        pass
 
             cleanup_fn = _cleanup
         except Exception as e:
@@ -289,9 +289,8 @@ def ensure_ollama_service_and_model(
             cleanup_fn()
         return False, None, f"Failed to list models from Ollama: {e}"
 
-    model_present = (
-        model in installed
-        or any(name.startswith(f"{model}:") or model.startswith(f"{name}:") for name in installed)
+    model_present = model in installed or any(
+        name.startswith(f"{model}:") or model.startswith(f"{name}:") for name in installed
     )
 
     if not model_present:

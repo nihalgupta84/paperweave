@@ -349,13 +349,21 @@ class IntegrationTests(unittest.TestCase):
 
     def test_detect_system_vram_and_hardware_simulated(self) -> None:
         # 1. Simulated NVIDIA GPU
-        with patch("corpus_converter.providers.shutil.which", side_effect=lambda cmd: "/usr/bin/nvidia-smi" if cmd == "nvidia-smi" else None):
-            with patch("corpus_converter.providers.subprocess.run", return_value=CompletedProcess([], 0, "RTX 4090, 24576, 21500\n", "")):
-                free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
-                self.assertEqual(backend, "cuda")
-                self.assertEqual(free_mb, 21500)
-                self.assertEqual(total_mb, 24576)
-                self.assertEqual(name, "RTX 4090")
+        with (
+            patch(
+                "corpus_converter.providers.shutil.which",
+                side_effect=lambda cmd: "/usr/bin/nvidia-smi" if cmd == "nvidia-smi" else None,
+            ),
+            patch(
+                "corpus_converter.providers.subprocess.run",
+                return_value=CompletedProcess([], 0, "RTX 4090, 24576, 21500\n", ""),
+            ),
+        ):
+            free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
+            self.assertEqual(backend, "cuda")
+            self.assertEqual(free_mb, 21500)
+            self.assertEqual(total_mb, 24576)
+            self.assertEqual(name, "RTX 4090")
 
         # 2. Simulated Mac Apple Silicon
         with (
@@ -373,7 +381,10 @@ class IntegrationTests(unittest.TestCase):
         with (
             patch("corpus_converter.providers.shutil.which", return_value=None),
             patch("corpus_converter.providers.platform.system", return_value="Linux"),
-            patch("corpus_converter.providers.os.sysconf", side_effect=lambda name: 4096 if name == "SC_PAGE_SIZE" else 2097152),
+            patch(
+                "corpus_converter.providers.os.sysconf",
+                side_effect=lambda name: 4096 if name == "SC_PAGE_SIZE" else 2097152,
+            ),
         ):
             free_mb, total_mb, backend, name = detect_system_vram_and_hardware()
             self.assertEqual(backend, "cpu")
@@ -446,4 +457,3 @@ class IntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -601,7 +601,7 @@ def _clean_dataset_candidate(value: str) -> str | None:
         )
     )
     if prep_match:
-        value = value[prep_match[-1].end():].strip()
+        value = value[prep_match[-1].end() :].strip()
 
     # Multi-pass stripping of leading prefixes (table titles, verbs, section markers, etc.)
     lead_pattern = re.compile(

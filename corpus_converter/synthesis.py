@@ -77,7 +77,10 @@ def write_experiments(corpus: Path, records: list[tuple[Any, ...]]) -> None:
     for work, _, experiments, _ in records:
         lines.extend([f"## {work['title']}", "", "### Datasets", ""])
         datasets = experiments.get("datasets", [])
-        lines.extend([f"- {canonicalize_dataset_name(item['name'])}{evidence_suffix(item)}" for item in datasets] or ["Not extracted."])
+        lines.extend(
+            [f"- {canonicalize_dataset_name(item['name'])}{evidence_suffix(item)}" for item in datasets]
+            or ["Not extracted."]
+        )
         lines.extend(["", "### Metrics", ""])
         metrics = experiments.get("metrics", [])
         lines.extend([f"- {item['name']}{evidence_suffix(item)}" for item in metrics] or ["Not extracted."])
