@@ -63,35 +63,82 @@ Feeding raw academic PDFs directly to AI agents (Claude, GPT, Gemini, Cursor, Au
 
 ## ⚡ Quick Start
 
-```bash
-# Install with full PDF parsing support
-python -m pip install "paperweave[full]"
+### Installation
 
-# Run complete end-to-end extraction on any folder of papers
+```bash
+# Install directly from the latest GitHub Release (v0.4.3)
+pip install git+https://github.com/nihalgupta84/paperweave.git@v0.4.3
+
+# Or install from the pre-built release wheel
+pip install https://github.com/nihalgupta84/paperweave/releases/download/v0.4.3/paperweave-0.4.3-py3-none-any.whl
+
+# Or install editable from source with full parsing dependencies
+git clone https://github.com/nihalgupta84/paperweave.git
+cd paperweave && pip install -e ".[full]"
+```
+
+### Run on Your Papers
+
+```bash
+# Run complete end-to-end extraction on any folder of papers (PDF, DOCX, HTML)
 paperweave run ./papers
+
+# Or ingest directly from a Google Drive folder via rclone
+paperweave run "https://drive.google.com/drive/folders/YOUR_FOLDER_ID" --remote gdrive
 ```
 
 ---
 
-## 🛡️ Zero-Hallucination Evidence Architecture
+## 🧠 Autonomous Hardware Adaptation & VRAM Envelope (New in v0.4.3)
+
+No manual configuration or guessing model sizes. PaperWeave automatically inspects the execution environment and dynamically tunes local LLM extraction:
+
+```bash
+# Autonomous hardware probe, auto-start service, and optimal model selection
+paperweave run ./papers --semantic-provider auto-local
+```
+
+### 1. Pure-Python Hardware Probes (Zero External Dependencies)
+- **NVIDIA CUDA & Enterprise MIG**: Probes `nvidia-smi` across physical cards and multi-instance GPU slices (e.g. A100 40GB/80GB, H100, RTX 4090).
+- **Apple Silicon (Metal Unified Memory)**: Inspects Darwin `sysctl hw.memsize` and calculates safe Metal memory limits.
+- **CPU Fallback**: Inspects host memory and throttles execution to prevent out-of-memory lockups.
+
+### 2. Dynamic Model Tier Selection
+| Available Memory | Recommended Tier | Model Variant | Quantization / Footprint |
+| :--- | :--- | :--- | :--- |
+| **$\ge$ 32 GB VRAM** | **14B Q8** | `qwen2.5-coder:14b-instruct-q8_0` | High-fidelity extraction (~16 GB) |
+| **16 – 32 GB VRAM** | **14B Q6** | `qwen2.5-coder:14b-instruct-q6_K` | Balanced high-parameter (~12 GB) |
+| **7 – 16 GB VRAM** | **7B Q8** | `qwen2.5-coder:7b-instruct-q8_0` | Fast, accurate (~8 GB) |
+| **< 7 GB VRAM / CPU**| **3B** | `qwen2.5-coder:3b` | Lightweight low-memory (~3 GB) |
+
+### 3. Ephemeral Service Lifecycle & Leak Prevention
+- Automatically launches an inactive local Ollama server in the background if down.
+- Dynamically checks if the chosen model is downloaded, pulling missing weights on-demand.
+- Enforces a strict `try...finally: resolution.cleanup()` process guard: kills ephemeral child processes upon completion to prevent zombie processes and free VRAM.
+- **Guaranteed Zero-Crash Fallback**: Automatically falls back to the 100% verified deterministic grounding engine if no local LLM runtime is available.
+
+---
+
+## 🛡️ Zero-Hallucination Evidence Architecture & Dataset Hygiene
 
 ### 1. Coordinate-Level Evidence Locators
 Every extracted fact, quantitative metric, baseline comparison, and dataset usage is bound to an exact block ID and page number in the source PDF.
-
-*For example, in a medical imaging project on a rectal cancer corpus, evidence extraction works like this:*
 ```markdown
 - DICE score on rectal cancer segmentation reaches 89.4% [doc_a1b2:block_042:page_6]
 - SwinUNETR baseline achieves 83.2% mIoU under 5-fold cross-validation [doc_c3d4:block_019:page_4]
 ```
-*(The same coordinate precision applies equally across Computer Vision, NLP, Robotics, or Biology literature.)*
 
-### 2. Strict Build-Time Audit
-During corpus synthesis, the pipeline validates every locator against the generated `blocks.jsonl` index. If an evidence reference points to a non-existent block or mismatched page, the pipeline flags the inconsistency immediately.
+### 2. Dataset Hygiene Overhaul
+Extracting benchmark datasets from research literature is notoriously noisy. PaperWeave v0.4.3 eliminates false positives:
+- **Table Header & Figure Caption Stripping**: Eliminates table artifact leaks (e.g. `TABLE II COMPARISON RESULTS ON THE TRANSCG` $\rightarrow$ `TransCG`).
+- **Linguistic Boundary Filtering**: Rejects demonstratives (*"This dataset"*), verbs (*"We evaluate"*), prepositions (*"Across"*, *"Under"*), and section titles (*"Related Work"*).
+- **Sub-split & Alias Canonicalization**: Merges casing variations and benchmark subsets (e.g. `MIMIC-CXR-JPG` $\rightarrow$ `MIMIC-CXR`).
+- **Dataset Density Audit**: Automatically alerts if the ratio of unique datasets to scholarly works exceeds 1.5.
 
 ### 3. Automated Quality Self-Audit (`synthesis/quality_report.md`)
 Every synthesized corpus automatically includes a transparent health report auditing:
 - **Evidence Locator Validity**: 100% verification rate of block and page coordinates.
-- **Dataset Hygiene**: Total discovered datasets and zero false positives (guards against running text or section headers).
+- **Dataset Hygiene**: Total discovered datasets and zero false positives.
 - **Grouping Health**: Verified single-work clusters and auto-merged preprint/journal editions.
 - **Metric Extraction Health**: Discovered quantitative metrics across domain benchmarks.
 

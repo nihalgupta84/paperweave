@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "paperweave"
 version = "0.4.3"
-description = "Evidence-backed research paper corpus normalization and synthesis"
+description = "The hallucination-proof research paper engine with autonomous hardware adaptation, coordinate-level evidence provenance, and benchmark synthesis for AI agents and scientists."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
