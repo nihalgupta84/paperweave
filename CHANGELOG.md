@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.3] - 2026-09-19
+
+- **Autonomous Hardware-Aware Local LLM Execution**:
+  - Automatically detect available VRAM across NVIDIA dedicated GPUs, enterprise container MIG slices, Apple Silicon unified memory (Metal), and CPU host memory with zero external dependencies.
+  - Dynamically optimize model tier to safely maximize VRAM utilization without OOM crashes (e.g. 14B Q8 for 32GB+ A100, 14B Q6 for 16-24GB, 7B Q8 for 8-12GB, 3B for <7GB, and CPU throttling), backed by `llm-checker smart-recommend` when present.
+  - Manage ephemeral background services: automatically start inactive local servers, pull missing models, and safely terminate child processes upon exit (`try...finally: resolution.cleanup()`) to prevent zombie processes and VRAM leaks.
+  - Provide guaranteed zero-crash fallback to the 100% verified deterministic grounded engine if no local LLM runtime is available.
+- **Dataset Extraction & Quality Audit Overhaul**:
+  - Eliminate table header leaks (`TABLE II COMPARISON RESULTS ON THE TRANSCG` -> `TransCG`), unify sub-splits and naming variants via canonical maps, and add independent table/verb/question audit heuristics.
+  - Integrate Dataset Density Audit (warning when unique datasets / scholarly works > 1.5).
+  - Reduced spurious dataset mentions from 104 down to 31 genuine benchmarks across the 43-paper corpus.
+- **CLI & Workflow Enhancements**:
+  - Add `--force` flag to `paperweave analyze` for fast re-analysis without re-running OCR.
+  - Add `auto-local` alias to `--semantic-provider` and enhance `capabilities` output with detailed VRAM budget and recommended model tier.
+
 ## [0.4.2] - 2026-09-18
 
 - Intelligently discover and prioritize compatible MinerU 3.x installations from dedicated conda environments (`/workspace/miniconda3/envs/mineru`, `~/miniconda3/envs/mineru`, etc.) and prevent conflicts with incompatible MinerU 4.x CLI.

@@ -4,8 +4,8 @@ message: "If PaperWeave is useful in your research, please cite this repository.
 type: software
 authors:
   - name: "PaperWeave contributors"
-version: 0.4.2
-date-released: 2026-09-18
+version: 0.4.3
+date-released: 2026-09-19
 license: MIT
 repository-code: "https://github.com/nihalgupta84/paperweave"
 url: "https://github.com/nihalgupta84/paperweave"
